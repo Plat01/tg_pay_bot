@@ -1,0 +1,1 @@
+"""Telegram Pay Bot package."""

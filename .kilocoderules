@@ -1,0 +1,42 @@
+# Правила проекта Telegram Pay Bot
+
+## Технологический стек
+- Python 3.12+
+- aiogram 3.x для Telegram бота
+- SQLModel для ORM (на базе SQLAlchemy 2.0 + Pydantic v2)
+- PostgreSQL 16
+- Alembic для миграций
+- pydantic-settings для конфигурации
+- UV как менеджер зависимостей
+
+## Архитектура
+- Разделение по слоям: handlers -> services -> repositories -> models
+- Асинхронный код везде (async/await)
+- Type hints для всех функций
+- Docstrings для классов и публичных методов
+
+## Стиль кода
+- Использовать asyncpg для асинхронного подключения к PostgreSQL
+- Все модели наследуются от SQLModel
+- Конфигурация через pydantic-settings с .env файлом
+- Логирование через logging модуль
+
+## Модели
+- User: пользователь с реферальным кодом и балансом
+- Payment: платежи со статусами pending/completed/failed/cancelled
+- ReferralEarning: реферальные начисления
+
+## Docker
+- Использовать multi-stage build для оптимизации размера
+- Не запускать от root пользователя
+- Использовать healthcheck для БД
+
+## Миграции
+- Все изменения схемы БД через Alembic
+- Автогенерация миграций: alembic revision --autogenerate -m "description"
+- Применение: alembic upgrade head
+
+## Реферальная система
+- Уникальный реферальный код для каждого пользователя
+- 1 уровень рефералов
+- Процент от платежа реферала на баланс реферера
