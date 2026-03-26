@@ -3,16 +3,18 @@
 import asyncio
 import logging
 
-from aiogram.enums import ParseMode
-
-from src.bot.bot import bot, dp
 from src.config import settings
 
-# Configure logging
+# Configure logging BEFORE imports that use logging
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+
+from aiogram.enums import ParseMode
+
+from src.bot.bot import bot, dp
+
 logger = logging.getLogger(__name__)
 
 

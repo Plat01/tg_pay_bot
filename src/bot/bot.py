@@ -1,13 +1,25 @@
 """Bot initialization and setup."""
 
+import logging
+import os
+
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 
 from src.config import settings
 from src.handlers import register_handlers
 
-# Initialize bot and dispatcher
-bot = Bot(token=settings.bot_token)
+logger = logging.getLogger(__name__)
+
+proxy_url = settings.proxy_url or os.environ.get("ALL_PROXY") or os.environ.get("all_proxy")
+
+if proxy_url:
+    logger.info(f"Using proxy: {proxy_url[:30]}***")
+    session = AiohttpSession(proxy=proxy_url)
+    bot = Bot(token=settings.bot_token, session=session)
+else:
+    logger.info("Running without proxy")
+    bot = Bot(token=settings.bot_token)
 dp = Dispatcher()
 
-# Register all handlers
 register_handlers(dp)

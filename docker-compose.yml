@@ -5,6 +5,9 @@ services:
       network: host
     container_name: tg_pay_bot_app
     restart: unless-stopped
+    network_mode: host
+    environment:
+      - ALL_PROXY=socks5://127.0.0.1:10810
     env_file:
       - .env
     depends_on:

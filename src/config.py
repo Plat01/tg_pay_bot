@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     # Application
     debug: bool = False
+    proxy_url: str = ""
 
     @field_validator("debug", mode="before")
     @classmethod
