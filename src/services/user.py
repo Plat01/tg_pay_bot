@@ -3,6 +3,7 @@
 import random
 import string
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,3 +89,21 @@ class UserService:
     async def get_referrals(self, user_id: int) -> list[User]:
         """Get all users referred by this user."""
         return await self.repository.get_referrals(user_id)
+
+    async def get_by_id(self, user_id: int) -> User | None:
+        """Get user by internal ID."""
+        return await self.repository.get_by_id(user_id)
+
+    async def update_balance(self, user: User, amount: Decimal) -> User:
+        """Update user balance.
+
+        Args:
+            user: User instance.
+            amount: Amount to add (can be negative for deductions).
+
+        Returns:
+            Updated User instance.
+        """
+        new_balance = user.balance + amount
+        user = await self.repository.update(user, {"balance": new_balance})
+        return user

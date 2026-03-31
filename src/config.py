@@ -14,6 +14,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # Ignore extra fields from .env (like legacy variables)
     )
 
     # Telegram Bot
@@ -33,6 +34,14 @@ class Settings(BaseSettings):
     # Application
     debug: bool = False
     proxy_url: str = ""
+
+    # Platega Payment Provider
+    platega_api_url: str = "https://api.platega.io"
+    platega_merchant_id: str = ""  # X-MerchantId header (UUID)
+    platega_secret: str = ""  # X-Secret header (API key)
+    platega_webhook_url: str = ""  # URL for receiving webhooks (must be publicly accessible)
+    platega_webhook_secret: str = ""  # Secret for webhook signature verification
+    default_payment_provider: str = "platega"
 
     @field_validator("debug", mode="before")
     @classmethod

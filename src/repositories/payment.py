@@ -1,6 +1,6 @@
 """Payment repository for database operations."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +47,7 @@ class PaymentRepository(BaseRepository[Payment]):
         payment.status = status
         if completed_at:
             payment.completed_at = completed_at
-        payment.updated_at = datetime.utcnow()
+        payment.updated_at = datetime.now(timezone.utc)
         await self.session.commit()
         await self.session.refresh(payment)
         return payment

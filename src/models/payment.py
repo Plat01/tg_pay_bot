@@ -1,7 +1,7 @@
 """Payment model."""
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
@@ -12,13 +12,20 @@ if TYPE_CHECKING:
     from src.models.user import User
 
 
+def _utc_now() -> datetime:
+    """Get current UTC datetime (Python 3.12+ compatible)."""
+    return datetime.now(timezone.utc)
+
+
 class PaymentStatus(str, enum.Enum):
     """Payment status enum."""
 
     PENDING = "pending"
     COMPLETED = "completed"
+    PAID = "paid"  # Alias for COMPLETED
     FAILED = "failed"
     CANCELLED = "cancelled"
+    EXPIRED = "expired"
 
 
 class Payment(SQLModel, table=True):
@@ -39,8 +46,8 @@ class Payment(SQLModel, table=True):
     payment_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=_utc_now)
     completed_at: datetime | None = Field(default=None)
 
     # Relationships
