@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     # Telegram Bot
     bot_token: str
+    bot_link: str = "https://t.me/testAiogram12Bot"  # Link to the bot for referral links
 
     # Database
     db_host: str = "localhost"

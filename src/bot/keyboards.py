@@ -19,7 +19,7 @@ class Keyboards:
         return ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="💰 Баланс"), KeyboardButton(text="➕ Пополнить")],
-                [KeyboardButton(text="🔗 Рефералы"), KeyboardButton(text="📖 Помощь")],
+                [KeyboardButton(text="👥 Пригласить друга"), KeyboardButton(text="📖 Помощь")],
             ],
             resize_keyboard=True,
         )
@@ -78,6 +78,29 @@ class Keyboards:
             inline_keyboard=[
                 [InlineKeyboardButton(text="📋 Статистика", callback_data=CallbackData.REFERRAL_STATS)],
                 [InlineKeyboardButton(text="🔗 Получить ссылку", callback_data=CallbackData.REFERRAL_LINK)],
+                [InlineKeyboardButton(text="❌ Закрыть", callback_data=CallbackData.CANCEL)],
+            ]
+        )
+
+    # Referral invite keyboard with share button
+    @staticmethod
+    def referral_invite(referral_link: str) -> InlineKeyboardMarkup:
+        """Referral invite keyboard with share button.
+
+        Args:
+            referral_link: Full referral link to share.
+
+        Returns:
+            InlineKeyboardMarkup with share button.
+        """
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📤 Отправить приглашение",
+                        switch_inline_query=referral_link,
+                    )
+                ],
                 [InlineKeyboardButton(text="❌ Закрыть", callback_data=CallbackData.CANCEL)],
             ]
         )
