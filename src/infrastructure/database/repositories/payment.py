@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.database.repositories.base import BaseRepository
 from src.models.payment import Payment, PaymentStatus
-from src.repositories.base import BaseRepository
 
 
 class PaymentRepository(BaseRepository[Payment]):

@@ -12,14 +12,14 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
-from src.models.payment import Payment, PaymentStatus
+from src.infrastructure.database.repositories import PaymentRepository
 from src.infrastructure.payments import (
     PaymentProvider,
     PaymentProviderFactory,
     CreatePaymentResult,
     PlategaPaymentMethod,
 )
-from src.repositories.payment import PaymentRepository
+from src.models.payment import Payment, PaymentStatus
 from src.services.referral import ReferralService
 
 logger = logging.getLogger(__name__)

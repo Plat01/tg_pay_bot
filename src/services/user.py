@@ -8,8 +8,8 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.infrastructure.database.repositories import UserRepository
 from src.models.user import User
-from src.repositories.user import UserRepository
 
 
 class UserService:

@@ -6,8 +6,8 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.database.repositories.base import BaseRepository
 from src.models.referral import ReferralEarning, ReferralEarningStatus
-from src.repositories.base import BaseRepository
 
 
 class ReferralEarningRepository(BaseRepository[ReferralEarning]):

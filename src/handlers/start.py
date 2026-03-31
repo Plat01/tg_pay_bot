@@ -6,7 +6,7 @@ from aiogram import Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
-from src.db.session import async_session_maker
+from src.infrastructure.database import async_session_maker
 from src.services.user import UserService
 
 logger = logging.getLogger(__name__)

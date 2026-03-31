@@ -11,7 +11,7 @@ from typing import Any
 from aiohttp import web
 
 from src.config import settings
-from src.db.session import async_session_maker
+from src.infrastructure.database import async_session_maker
 from src.infrastructure.payments import (
     PaymentProviderFactory,
     PaymentSignatureError,

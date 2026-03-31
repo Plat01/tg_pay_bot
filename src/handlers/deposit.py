@@ -14,9 +14,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from src.config import settings
-from src.db.session import async_session_maker
-from src.models.payment import PaymentStatus
+from src.infrastructure.database import async_session_maker
 from src.infrastructure.payments import PlategaPaymentMethod
+from src.models.payment import PaymentStatus
 from src.services.payment import PaymentService
 
 logger = logging.getLogger(__name__)

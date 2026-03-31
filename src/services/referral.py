@@ -5,11 +5,10 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.infrastructure.database.repositories import ReferralEarningRepository, UserRepository
 from src.models.payment import Payment
 from src.models.referral import ReferralEarning, ReferralEarningStatus
 from src.models.user import User
-from src.repositories.referral import ReferralEarningRepository
-from src.repositories.user import UserRepository
 
 
 class ReferralService:
