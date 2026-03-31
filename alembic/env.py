@@ -7,7 +7,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from src.config import settings
-from src.db.session import Base
+from src.infrastructure.database import Base
 # Import all models to register them with Base.metadata
 from src.models import User, Payment, PaymentStatus, ReferralEarning, ReferralEarningStatus  # noqa: F401
 
