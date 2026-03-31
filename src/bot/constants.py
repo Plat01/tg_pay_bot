@@ -27,6 +27,9 @@ class CallbackData:
     # Balance
     BALANCE = "balance"
 
+    # Help
+    HELP = "help"
+
 
 class Commands:
     """Bot command constants."""

@@ -4,7 +4,7 @@ import logging
 
 from aiogram import Dispatcher, F
 from aiogram.filters import CommandStart
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
@@ -18,8 +18,7 @@ logger = logging.getLogger(__name__)
 async def cmd_start(message: Message) -> None:
     """Handle /start command - register or welcome back user.
 
-    Shows main menu keyboard with buttons for balance, deposit,
-    referral, and help.
+    Shows main menu inline keyboard with buttons under message.
     """
     # Extract referral code from command arguments
     args = message.text.split() if message.text else []
@@ -52,91 +51,117 @@ async def cmd_start(message: Message) -> None:
         if is_new_user:
             # New user - show welcome message
             welcome_text = (
-                f"👋 Добро пожаловать, {user.first_name or 'пользователь'}!\n\n"
+                f"👋 <b>Добро пожаловать, {user.first_name or 'пользователь'}!</b>\n\n"
                 f"Вы успешно зарегистрированы.\n\n"
-                f"Используйте кнопки меню для управления:\n"
-                f"• 💰 Баланс — проверить баланс\n"
-                f"• ➕ Пополнить — пополнить баланс\n"
-                f"• 👥 Пригласить друга — реферальная программа\n"
-                f"• 📖 Помощь — справка по командам"
+                f"Используйте кнопки меню для управления:"
             )
             logger.info(f"New user registered: {user.id} (@{user.username})")
         else:
             # Existing user - show welcome back message
             welcome_text = (
-                f"👋 С возвращением, {user.first_name or 'пользователь'}!\n\n"
+                f"👋 <b>С возвращением, {user.first_name or 'пользователь'}!</b>\n\n"
                 f"Ваш баланс: {db_user.balance} ₽\n\n"
-                f"Используйте кнопки меню для управления."
+                f"Используйте кнопки меню для управления:"
             )
             logger.info(f"User logged in: {user.id} (@{user.username})")
 
-        # Send welcome message with main menu keyboard
+        # Send welcome message with main menu inline keyboard
         await message.answer(
             welcome_text,
-            reply_markup=Keyboards.main_menu(),
-        )
-
-
-async def handle_balance_button(message: Message) -> None:
-    """Handle 💰 Баланс button from main menu."""
-    async with async_session_maker() as session:
-        user_service = UserService(session)
-        user = await user_service.get_user_by_telegram_id(message.from_user.id)
-
-        if not user:
-            await message.answer(
-                "❌ Вы не зарегистрированы.\n"
-                "Используйте /start для регистрации.",
-                reply_markup=Keyboards.main_menu(),
-            )
-            return
-
-        await message.answer(
-            f"💰 <b>Ваш баланс</b>\n\n"
-            f"Сумма: {user.balance} ₽\n"
-            f"Реферальный код: <code>{user.referral_code}</code>\n\n"
-            f"Для пополнения используйте кнопку ➕ Пополнить",
             parse_mode="HTML",
             reply_markup=Keyboards.main_menu(),
         )
 
 
-async def handle_deposit_button(message: Message) -> None:
+async def handle_main_menu_callback(callback: CallbackQuery) -> None:
+    """Handle 'Назад' button - return to main menu."""
+    user = callback.from_user
+
+    async with async_session_maker() as session:
+        user_service = UserService(session)
+        db_user = await user_service.get_user_by_telegram_id(user.id)
+
+        if not db_user:
+            await callback.message.edit_text(
+                "❌ Вы не зарегистрированы.\n"
+                "Используйте /start для регистрации.",
+                reply_markup=None,
+            )
+            await callback.answer()
+            return
+
+        welcome_text = (
+            f"👋 <b>Главное меню</b>\n\n"
+            f"Ваш баланс: {db_user.balance} ₽\n\n"
+            f"Используйте кнопки меню для управления:"
+        )
+
+        await callback.message.edit_text(
+            welcome_text,
+            parse_mode="HTML",
+            reply_markup=Keyboards.main_menu(),
+        )
+        await callback.answer()
+
+
+async def handle_balance_callback(callback: CallbackQuery) -> None:
+    """Handle 💰 Баланс button from main menu."""
+    async with async_session_maker() as session:
+        user_service = UserService(session)
+        user = await user_service.get_user_by_telegram_id(callback.from_user.id)
+
+        if not user:
+            await callback.message.edit_text(
+                "❌ Вы не зарегистрированы.\n"
+                "Используйте /start для регистрации.",
+                reply_markup=Keyboards.back_to_menu(),
+            )
+            await callback.answer()
+            return
+
+        balance_text = Texts.BALANCE_INFO.format(
+            balance=user.balance,
+            referral_code=user.referral_code,
+        )
+
+        await callback.message.edit_text(
+            balance_text,
+            parse_mode="HTML",
+            reply_markup=Keyboards.balance_actions(),
+        )
+        await callback.answer()
+
+
+async def handle_deposit_callback(callback: CallbackQuery) -> None:
     """Handle ➕ Пополнить button from main menu.
 
     Redirects to deposit flow.
     """
-    # Import deposit handler to start deposit flow
-    from src.bot.handlers.deposit import cmd_deposit
-    from aiogram.fsm.context import FSMContext
-    from aiogram.fsm.storage.memory import MemoryStorage
-
-    # Create a fake state context for the deposit flow
-    # Note: This will be handled properly by the FSM middleware
-    await message.answer(
+    await callback.message.edit_text(
         "💳 <b>Пополнение баланса</b>\n\n"
-        "Для пополнения используйте команду /deposit\n"
-        "или нажмите на кнопку ниже:",
+        "Для пополнения используйте команду /deposit",
         parse_mode="HTML",
-        reply_markup=Keyboards.main_menu(),
+        reply_markup=Keyboards.back_to_menu(),
     )
+    await callback.answer()
 
 
-async def handle_referral_button(message: Message) -> None:
+async def handle_referral_callback(callback: CallbackQuery) -> None:
     """Handle 👥 Пригласить друга button from main menu.
 
     Shows referral information with invite link and share button.
     """
     async with async_session_maker() as session:
         user_service = UserService(session)
-        user = await user_service.get_user_by_telegram_id(message.from_user.id)
+        user = await user_service.get_user_by_telegram_id(callback.from_user.id)
 
         if not user:
-            await message.answer(
+            await callback.message.edit_text(
                 "❌ Вы не зарегистрированы.\n"
                 "Используйте /start для регистрации.",
-                reply_markup=Keyboards.main_menu(),
+                reply_markup=Keyboards.back_to_menu(),
             )
+            await callback.answer()
             return
 
         # Build referral link
@@ -149,31 +174,51 @@ async def handle_referral_button(message: Message) -> None:
         )
 
         # Send referral info with invite keyboard
-        await message.answer(
+        await callback.message.edit_text(
             referral_text,
             parse_mode="HTML",
             reply_markup=Keyboards.referral_invite(referral_link),
         )
+        await callback.answer()
 
 
-async def handle_help_button(message: Message) -> None:
+async def handle_help_callback(callback: CallbackQuery) -> None:
     """Handle 📖 Помощь button from main menu."""
-    await message.answer(
+    await callback.message.edit_text(
         Texts.HELP_TEXT,
         parse_mode="HTML",
-        reply_markup=Keyboards.main_menu(),
+        reply_markup=Keyboards.back_to_menu(),
     )
+    await callback.answer()
 
 
 def register_start_handlers(dp: Dispatcher) -> None:
-    """Register start command and main menu button handlers."""
+    """Register start command and main menu callback handlers."""
+    from src.bot.constants import CallbackData
+
     # Command handlers
     dp.message.register(cmd_start, CommandStart())
 
-    # Reply keyboard button handlers
-    dp.message.register(handle_balance_button, F.text == "💰 Баланс")
-    dp.message.register(handle_deposit_button, F.text == "➕ Пополнить")
-    dp.message.register(handle_referral_button, F.text == "👥 Пригласить друга")
-    dp.message.register(handle_help_button, F.text == "📖 Помощь")
+    # Callback handlers for inline keyboard buttons
+    dp.callback_query.register(
+        handle_main_menu_callback,
+        F.data == CallbackData.MAIN_MENU,
+    )
+    dp.callback_query.register(
+        handle_balance_callback,
+        F.data == CallbackData.BALANCE,
+    )
+    dp.callback_query.register(
+        handle_deposit_callback,
+        F.data == CallbackData.DEPOSIT,
+    )
+    dp.callback_query.register(
+        handle_referral_callback,
+        F.data == CallbackData.REFERRAL,
+    )
+    dp.callback_query.register(
+        handle_help_callback,
+        F.data == CallbackData.HELP,
+    )
 
     logger.info("Start and main menu handlers registered")

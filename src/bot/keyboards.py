@@ -12,16 +12,21 @@ from src.bot.constants import CallbackData
 class Keyboards:
     """All bot keyboards."""
 
-    # Main menu keyboard (Reply)
+    # Main menu keyboard (Inline - buttons under message)
     @staticmethod
-    def main_menu() -> ReplyKeyboardMarkup:
-        """Main menu reply keyboard."""
-        return ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="💰 Баланс"), KeyboardButton(text="➕ Пополнить")],
-                [KeyboardButton(text="👥 Пригласить друга"), KeyboardButton(text="📖 Помощь")],
-            ],
-            resize_keyboard=True,
+    def main_menu() -> InlineKeyboardMarkup:
+        """Main menu inline keyboard."""
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="💰 Баланс", callback_data=CallbackData.BALANCE),
+                    InlineKeyboardButton(text="➕ Пополнить", callback_data=CallbackData.DEPOSIT),
+                ],
+                [
+                    InlineKeyboardButton(text="👥 Пригласить друга", callback_data=CallbackData.REFERRAL),
+                    InlineKeyboardButton(text="📖 Помощь", callback_data=CallbackData.HELP),
+                ],
+            ]
         )
 
     # Deposit method selection
@@ -34,7 +39,7 @@ class Keyboards:
                     InlineKeyboardButton(text="💳 СБП QR", callback_data=CallbackData.DEPOSIT_SBP),
                     InlineKeyboardButton(text="💳 Карта", callback_data=CallbackData.DEPOSIT_CARD),
                 ],
-                [InlineKeyboardButton(text="❌ Отмена", callback_data=CallbackData.CANCEL)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
 
@@ -50,7 +55,7 @@ class Keyboards:
                         text="✅ Проверить статус",
                         callback_data=f"{CallbackData.DEPOSIT_CHECK}:{payment_id}",
                     ),
-                    InlineKeyboardButton(text="❌ Отмена", callback_data=CallbackData.CANCEL),
+                    InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU),
                 ],
             ]
         )
@@ -66,7 +71,7 @@ class Keyboards:
                         callback_data=f"{CallbackData.DEPOSIT_CHECK}:{payment_id}",
                     ),
                 ],
-                [InlineKeyboardButton(text="❌ Закрыть", callback_data=CallbackData.CANCEL)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
 
@@ -78,7 +83,7 @@ class Keyboards:
             inline_keyboard=[
                 [InlineKeyboardButton(text="📋 Статистика", callback_data=CallbackData.REFERRAL_STATS)],
                 [InlineKeyboardButton(text="🔗 Получить ссылку", callback_data=CallbackData.REFERRAL_LINK)],
-                [InlineKeyboardButton(text="❌ Закрыть", callback_data=CallbackData.CANCEL)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
 
@@ -101,7 +106,7 @@ class Keyboards:
                         switch_inline_query=referral_link,
                     )
                 ],
-                [InlineKeyboardButton(text="❌ Закрыть", callback_data=CallbackData.CANCEL)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
 
@@ -111,7 +116,7 @@ class Keyboards:
         """Simple cancel keyboard."""
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="❌ Отмена", callback_data=CallbackData.CANCEL)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
 
@@ -121,7 +126,7 @@ class Keyboards:
         """Back to main menu keyboard."""
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CallbackData.MAIN_MENU)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
 
@@ -133,6 +138,7 @@ class Keyboards:
             inline_keyboard=[
                 [InlineKeyboardButton(text="➕ Пополнить", callback_data=CallbackData.DEPOSIT)],
                 [InlineKeyboardButton(text="📋 История", callback_data=CallbackData.DEPOSIT_HISTORY)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
 
@@ -152,6 +158,6 @@ class Keyboards:
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 buttons if buttons else [],
-                [InlineKeyboardButton(text="❌ Закрыть", callback_data=CallbackData.CANCEL)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
