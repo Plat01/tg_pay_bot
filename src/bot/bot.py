@@ -6,8 +6,8 @@ import os
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 
+from src.bot.handlers import register_handlers
 from src.config import settings
-from src.handlers import register_handlers
 
 logger = logging.getLogger(__name__)
 

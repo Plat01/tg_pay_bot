@@ -2,7 +2,7 @@
 
 from aiogram import Dispatcher
 
-from src.handlers.start import register_start_handlers
+from src.bot.handlers.start import register_start_handlers
 
 
 def register_handlers(dp: Dispatcher) -> None:
