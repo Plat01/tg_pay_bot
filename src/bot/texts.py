@@ -43,8 +43,11 @@ class Texts:
     BALANCE_INFO = (
         "💰 <b>Ваш баланс</b>\n\n"
         "Сумма: {balance} ₽\n"
-        "Реферальный код: <code>{referral_code}</code>\n\n"
-        "Для пополнения используйте кнопку ➕ Пополнить"
+        "Реферальный код: <code>{referral_code}</code>"
+    )
+    BALANCE_DEPOSIT_PROMPT = (
+        "💳 <b>Пополнение баланса</b>\n\n"
+        "Выберите сумму или используйте команду <code>/deposit <rub></code>"
     )
     BALANCE_ZERO = "💰 Ваш баланс: 0.00 ₽\n\nИспользуйте /deposit для пополнения."
 

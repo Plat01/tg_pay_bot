@@ -146,6 +146,28 @@ class Keyboards:
             ]
         )
 
+    # Balance deposit amount selection
+    @staticmethod
+    def balance_deposit_amounts() -> InlineKeyboardMarkup:
+        """Balance deposit amount selection keyboard."""
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="50 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_50),
+                    InlineKeyboardButton(text="100 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_100),
+                ],
+                [
+                    InlineKeyboardButton(text="250 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_250),
+                    InlineKeyboardButton(text="500 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_500),
+                ],
+                [
+                    InlineKeyboardButton(text="1000 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_1000),
+                    InlineKeyboardButton(text="2500 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_2500),
+                ],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
+            ]
+        )
+
     # Deposit history pagination
     @staticmethod
     def deposit_history_pagination(page: int, total_pages: int) -> InlineKeyboardMarkup:

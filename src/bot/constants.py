@@ -40,6 +40,14 @@ class CallbackData:
     TARIFF_3_MONTHS = "tariff_3_months"
     TARIFF_12_MONTHS = "tariff_12_months"
 
+    # Deposit amounts
+    DEPOSIT_AMOUNT_50 = "deposit_50"
+    DEPOSIT_AMOUNT_100 = "deposit_100"
+    DEPOSIT_AMOUNT_250 = "deposit_250"
+    DEPOSIT_AMOUNT_500 = "deposit_500"
+    DEPOSIT_AMOUNT_1000 = "deposit_1000"
+    DEPOSIT_AMOUNT_2500 = "deposit_2500"
+
 
 class Commands:
     """Bot command constants."""

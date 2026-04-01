@@ -115,12 +115,20 @@ async def handle_balance_callback(callback: CallbackQuery) -> None:
             referral_code=user.referral_code,
         )
 
+        # Send balance info with deposit amount buttons
         await callback.message.edit_text(
             balance_text,
             parse_mode="HTML",
             reply_markup=Keyboards.balance_actions(),
         )
         await callback.answer()
+        
+        # Send deposit prompt with amount buttons
+        await callback.message.answer(
+            Texts.BALANCE_DEPOSIT_PROMPT,
+            parse_mode="HTML",
+            reply_markup=Keyboards.balance_deposit_amounts(),
+        )
 
 
 async def handle_deposit_callback(callback: CallbackQuery) -> None:
@@ -201,6 +209,33 @@ async def handle_buy_subscription_callback(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+async def handle_deposit_amount_callback(callback: CallbackQuery) -> None:
+    """Handle deposit amount selection from balance screen."""
+    # Parse amount from callback data
+    amount_map = {
+        CallbackData.DEPOSIT_AMOUNT_50: 50,
+        CallbackData.DEPOSIT_AMOUNT_100: 100,
+        CallbackData.DEPOSIT_AMOUNT_250: 250,
+        CallbackData.DEPOSIT_AMOUNT_500: 500,
+        CallbackData.DEPOSIT_AMOUNT_1000: 1000,
+        CallbackData.DEPOSIT_AMOUNT_2500: 2500,
+    }
+    
+    amount = amount_map.get(callback.data)
+    if not amount:
+        await callback.answer("❌ Неверная сумма", show_alert=True)
+        return
+    
+    # Send message with selected amount and deposit link
+    await callback.message.answer(
+        f"💳 <b>Пополнение на {amount} ₽</b>\n\n"
+        f"Для продолжения используйте команду <code>/deposit {amount}</code>",
+        parse_mode="HTML",
+        reply_markup=Keyboards.back_to_menu(),
+    )
+    await callback.answer()
+
+
 def register_start_handlers(dp: Dispatcher) -> None:
     """Register start command and main menu callback handlers."""
     from src.bot.constants import CallbackData
@@ -236,6 +271,10 @@ def register_start_handlers(dp: Dispatcher) -> None:
     dp.callback_query.register(
         handle_buy_subscription_callback,
         F.data == CallbackData.BUY_SUBSCRIPTION,
+    )
+    dp.callback_query.register(
+        handle_deposit_amount_callback,
+        F.data.startswith("deposit_"),
     )
 
     logger.info("Start and main menu handlers registered")
