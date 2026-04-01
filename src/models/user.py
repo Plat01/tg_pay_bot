@@ -17,7 +17,7 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
 
     id: int | None = Field(default=None, primary_key=True)
-    telegram_id: int = Field(unique=True, index=True)
+    telegram_id: str = Field(unique=True, index=True, max_length=50)
     username: str | None = Field(default=None, max_length=255)
     first_name: str | None = Field(default=None, max_length=255)
     last_name: str | None = Field(default=None, max_length=255)
@@ -50,7 +50,7 @@ class User(SQLModel, table=True):
 
         json_schema_extra = {
             "example": {
-                "telegram_id": 123456789,
+                "telegram_id": "123456789",
                 "username": "johndoe",
                 "first_name": "John",
                 "last_name": "Doe",

@@ -14,7 +14,7 @@ class UserRepository(BaseRepository[User]):
         """Initialize user repository."""
         super().__init__(User, session)
 
-    async def get_by_telegram_id(self, telegram_id: int) -> User | None:
+    async def get_by_telegram_id(self, telegram_id: str) -> User | None:
         """Get user by Telegram ID."""
         statement = select(User).where(User.telegram_id == telegram_id)
         result = await self.session.execute(statement)

@@ -519,7 +519,7 @@ async def cmd_balance(message: Message) -> None:
             from src.bot.texts import Texts
 
             user_service = UserService(session)
-            user = await user_service.get_user_by_telegram_id(message.from_user.id)
+            user = await user_service.get_user_by_telegram_id(str(message.from_user.id))
 
             if not user:
                 await message.answer(Texts.ERROR_NOT_REGISTERED)

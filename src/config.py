@@ -64,11 +64,11 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
-    def admin_id_list(self) -> list[int]:
+    def admin_id_list(self) -> list[str]:
         """Parse admin IDs from comma-separated string."""
         if not self.admin_ids.strip():
             return []
-        return [int(id.strip()) for id in self.admin_ids.split(",") if id.strip()]
+        return [id.strip() for id in self.admin_ids.split(",") if id.strip()]
 
     @property
     def database_url(self) -> str:

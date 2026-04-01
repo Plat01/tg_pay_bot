@@ -36,7 +36,7 @@ async def cmd_start(message: Message) -> None:
 
         # Register or update user
         db_user = await user_service.get_or_create_user(
-            telegram_id=user.id,
+            telegram_id=str(user.id),
             username=user.username,
             first_name=user.first_name,
             last_name=user.last_name,
@@ -77,7 +77,7 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
 
     async with async_session_maker() as session:
         user_service = UserService(session)
-        db_user = await user_service.get_user_by_telegram_id(user.id)
+        db_user = await user_service.get_user_by_telegram_id(str(user.id))
 
         if not db_user:
             await callback.message.edit_text(
@@ -101,7 +101,7 @@ async def handle_balance_callback(callback: CallbackQuery) -> None:
     """Handle 💰 Баланс button from main menu."""
     async with async_session_maker() as session:
         user_service = UserService(session)
-        user = await user_service.get_user_by_telegram_id(callback.from_user.id)
+        user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
 
         if not user:
             await callback.message.edit_text(
@@ -154,7 +154,7 @@ async def handle_referral_callback(callback: CallbackQuery) -> None:
     """
     async with async_session_maker() as session:
         user_service = UserService(session)
-        user = await user_service.get_user_by_telegram_id(callback.from_user.id)
+        user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
 
         if not user:
             await callback.message.edit_text(

@@ -27,7 +27,7 @@ class UserService:
 
     async def get_or_create_user(
         self,
-        telegram_id: int,
+        telegram_id: int | str,
         username: str | None = None,
         first_name: str | None = None,
         last_name: str | None = None,
@@ -37,7 +37,9 @@ class UserService:
         referral_code: str | None = None,
     ) -> User:
         """Get existing user or create a new one."""
-        user = await self.repository.get_by_telegram_id(telegram_id)
+        # Convert telegram_id to string for storage
+        telegram_id_str = str(telegram_id)
+        user = await self.repository.get_by_telegram_id(telegram_id_str)
 
         if user:
             # Update user info if changed
@@ -60,7 +62,7 @@ class UserService:
 
         # Create new user
         user_data = {
-            "telegram_id": telegram_id,
+            "telegram_id": telegram_id_str,
             "username": username,
             "first_name": first_name,
             "last_name": last_name,
@@ -78,9 +80,9 @@ class UserService:
 
         return await self.repository.create(user_data)
 
-    async def get_user_by_telegram_id(self, telegram_id: int) -> User | None:
+    async def get_user_by_telegram_id(self, telegram_id: int | str) -> User | None:
         """Get user by Telegram ID."""
-        return await self.repository.get_by_telegram_id(telegram_id)
+        return await self.repository.get_by_telegram_id(str(telegram_id))
 
     async def get_user_by_referral_code(self, referral_code: str) -> User | None:
         """Get user by referral code."""

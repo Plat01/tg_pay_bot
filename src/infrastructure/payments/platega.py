@@ -160,7 +160,15 @@ class PlategaProvider(PaymentProvider):
         method = payment_method or self._default_payment_method
 
         # Build payload string from metadata
-        payload_str = json.dumps(metadata) if metadata else None
+        # Convert Decimal to str for JSON serialization
+        if metadata:
+            serialized_metadata = {
+                k: str(v) if isinstance(v, Decimal) else v
+                for k, v in metadata.items()
+            }
+            payload_str = json.dumps(serialized_metadata)
+        else:
+            payload_str = None
 
         # Create request body using Pydantic schema
         request_data = PlategaCreateRequest(
