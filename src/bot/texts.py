@@ -47,7 +47,7 @@ class Texts:
     )
     BALANCE_DEPOSIT_PROMPT = (
         "💳 <b>Пополнение баланса</b>\n\n"
-        "Выберите сумму или используйте команду <code>/deposit <rub></code>"
+        "Выберите сумму или используйте команду <code>/deposit &lt;rub&gt;</code>"
     )
     BALANCE_ZERO = "💰 Ваш баланс: 0.00 ₽\n\nИспользуйте /deposit для пополнения."
 
