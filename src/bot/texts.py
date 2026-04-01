@@ -52,6 +52,16 @@ class Texts:
     BALANCE_ZERO = "💰 Ваш баланс: 0.00 ₽\n\nИспользуйте /deposit для пополнения."
 
     # Deposit
+    DEPOSIT_START = (
+        "💳 <b>Пополнение баланса</b>\n\n"
+        "Минимальная сумма: {min_amount} ₽\n\n"
+        "Выберите сумму или введите вручную:"
+    )
+    DEPOSIT_AMOUNT_SELECTED = (
+        "💰 <b>Пополнение баланса</b>\n\n"
+        "Сумма: {amount} ₽\n\n"
+        "Выберите способ оплаты:"
+    )
     DEPOSIT_AMOUNT_PROMPT = "Введите сумму пополнения (минимум {min_amount} ₽):"
     DEPOSIT_METHOD_SELECT = "Выберите способ оплаты:"
     DEPOSIT_CREATING = "⏳ Создаю платеж..."
@@ -64,8 +74,10 @@ class Texts:
     DEPOSIT_PENDING = "⏳ Платёж ожидает оплаты.\n\nСумма: {amount:.2f} ₽"
     DEPOSIT_COMPLETED = "✅ Платёж успешно завершен!\n\nСумма: {amount:.2f} ₽ зачислена на баланс."
     DEPOSIT_FAILED = "❌ Платёж не удался. Попробуйте снова."
-    DEPOSIT_CANCELLED = "❌ Платёж отменён."
+    DEPOSIT_CANCELLED = "❌ Пополнение отменено."
     DEPOSIT_INVALID_AMOUNT = "❌ Неверная сумма. Введите число от {min_amount} до {max_amount} ₽."
+    DEPOSIT_MIN_AMOUNT_ERROR = "❌ Минимальная сумма пополнения: {min_amount} ₽\nВведите другую сумму:"
+    DEPOSIT_INVALID_FORMAT = "❌ Неверный формат суммы.\nВведите число, например: 500 или 1000"
     DEPOSIT_HISTORY_EMPTY = "История платежей пуста."
     DEPOSIT_HISTORY_TITLE = "📋 История платежей:\n\n"
 

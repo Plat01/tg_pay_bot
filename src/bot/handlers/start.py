@@ -4,6 +4,7 @@ import logging
 
 from aiogram import Dispatcher, F
 from aiogram.filters import CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from src.bot.keyboards import Keyboards
@@ -134,12 +135,14 @@ async def handle_balance_callback(callback: CallbackQuery) -> None:
 async def handle_deposit_callback(callback: CallbackQuery) -> None:
     """Handle ➕ Пополнить button from main menu.
 
-    Redirects to deposit flow.
+    Redirects to deposit flow with amount selection keyboard.
     """
+    from src.bot.handlers.deposit import MIN_DEPOSIT_AMOUNT
+    
     await callback.message.edit_text(
-        Texts.DEPOSIT_PROMPT,
+        Texts.DEPOSIT_START.format(min_amount=MIN_DEPOSIT_AMOUNT),
         parse_mode="HTML",
-        reply_markup=Keyboards.back_to_menu(),
+        reply_markup=Keyboards.balance_deposit_amounts(),
     )
     await callback.answer()
 
@@ -209,8 +212,16 @@ async def handle_buy_subscription_callback(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-async def handle_deposit_amount_callback(callback: CallbackQuery) -> None:
-    """Handle deposit amount selection from balance screen."""
+async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handle deposit amount selection from balance screen.
+    
+    Starts deposit flow with selected amount.
+    """
+    from src.bot.handlers.deposit import (
+        DepositStates,
+        process_amount_preset,
+    )
+    
     # Parse amount from callback data
     amount_map = {
         CallbackData.DEPOSIT_AMOUNT_50: 50,
@@ -226,14 +237,18 @@ async def handle_deposit_amount_callback(callback: CallbackQuery) -> None:
         await callback.answer("❌ Неверная сумма", show_alert=True)
         return
     
-    # Send message with selected amount and deposit link
-    await callback.message.answer(
-        f"💳 <b>Пополнение на {amount} ₽</b>\n\n"
-        f"Для продолжения используйте команду <code>/deposit {amount}</code>",
-        parse_mode="HTML",
-        reply_markup=Keyboards.back_to_menu(),
-    )
-    await callback.answer()
+    # Set FSM state and process amount
+    await state.set_state(DepositStates.amount)
+    
+    # Create a mock callback with data in format "amount:{amount}"
+    original_data = callback.data
+    callback.data = f"amount:{amount}"
+    
+    # Call the deposit handler
+    await process_amount_preset(callback, state)
+    
+    # Restore original callback data
+    callback.data = original_data
 
 
 def register_start_handlers(dp: Dispatcher) -> None:

@@ -13,6 +13,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from src.bot.texts import Texts
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.payments import PlategaPaymentMethod
@@ -99,6 +100,8 @@ def get_amount_keyboard() -> InlineKeyboardMarkup:
 async def cmd_deposit(message: Message, state: FSMContext) -> None:
     """Handle /deposit command - start deposit flow.
 
+    Supports optional amount argument: /deposit <amount>
+    
     Args:
         message: Telegram message.
         state: FSM state context.
@@ -106,14 +109,42 @@ async def cmd_deposit(message: Message, state: FSMContext) -> None:
     # Clear any previous state
     await state.clear()
 
-    # Set new state
+    # Check for amount argument
+    args = message.text.split() if message.text else []
+    if len(args) > 1:
+        # Amount provided as argument
+        try:
+            amount_str = args[1].replace(",", ".").replace(" ", "").replace("₽", "")
+            amount = Decimal(amount_str)
+            
+            # Validate minimum amount
+            if amount < MIN_DEPOSIT_AMOUNT:
+                await message.answer(
+                    Texts.DEPOSIT_MIN_AMOUNT_ERROR.format(min_amount=MIN_DEPOSIT_AMOUNT),
+                )
+                return
+            
+            # Store amount and proceed to method selection
+            await state.update_data(amount=amount)
+            await state.set_state(DepositStates.method)
+            
+            await message.answer(
+                Texts.DEPOSIT_AMOUNT_SELECTED.format(amount=amount),
+                parse_mode="HTML",
+                reply_markup=get_payment_method_keyboard(),
+            )
+            return
+            
+        except InvalidOperation:
+            await message.answer(Texts.DEPOSIT_INVALID_FORMAT)
+            return
+
+    # No amount provided - show amount selection keyboard
     await state.set_state(DepositStates.amount)
 
     # Send message with amount options
     await message.answer(
-        "💳 <b>Пополнение баланса</b>\n\n"
-        f"Минимальная сумма: {MIN_DEPOSIT_AMOUNT} ₽\n\n"
-        "Выберите сумму или введите вручную:",
+        Texts.DEPOSIT_START.format(min_amount=MIN_DEPOSIT_AMOUNT),
         parse_mode="HTML",
         reply_markup=get_amount_keyboard(),
     )
@@ -136,7 +167,7 @@ async def process_amount_preset(callback: CallbackQuery, state: FSMContext) -> N
 
     if data == "cancel":
         await state.clear()
-        await callback.message.edit_text("❌ Пополнение отменено")
+        await callback.message.edit_text(Texts.DEPOSIT_CANCELLED)
         await callback.answer()
         return
 
@@ -146,9 +177,7 @@ async def process_amount_preset(callback: CallbackQuery, state: FSMContext) -> N
 
     # Show payment method selection
     await callback.message.edit_text(
-        f"💰 <b>Пополнение баланса</b>\n\n"
-        f"Сумма: {amount} ₽\n\n"
-        "Выберите способ оплаты:",
+        Texts.DEPOSIT_AMOUNT_SELECTED.format(amount=amount),
         parse_mode="HTML",
         reply_markup=get_payment_method_keyboard(),
     )
@@ -170,8 +199,7 @@ async def process_amount_input(message: Message, state: FSMContext) -> None:
         # Validate minimum amount
         if amount < MIN_DEPOSIT_AMOUNT:
             await message.answer(
-                f"❌ Минимальная сумма пополнения: {MIN_DEPOSIT_AMOUNT} ₽\n"
-                "Введите другую сумму:",
+                Texts.DEPOSIT_MIN_AMOUNT_ERROR.format(min_amount=MIN_DEPOSIT_AMOUNT),
             )
             return
 
@@ -180,18 +208,13 @@ async def process_amount_input(message: Message, state: FSMContext) -> None:
         await state.set_state(DepositStates.method)
 
         await message.answer(
-            f"💰 <b>Пополнение баланса</b>\n\n"
-            f"Сумма: {amount} ₽\n\n"
-            "Выберите способ оплаты:",
+            Texts.DEPOSIT_AMOUNT_SELECTED.format(amount=amount),
             parse_mode="HTML",
             reply_markup=get_payment_method_keyboard(),
         )
 
     except InvalidOperation:
-        await message.answer(
-            "❌ Неверный формат суммы.\n"
-            "Введите число, например: 500 или 1000",
-        )
+        await message.answer(Texts.DEPOSIT_INVALID_FORMAT)
 
 
 async def process_method_selection(callback: CallbackQuery, state: FSMContext) -> None:
@@ -206,7 +229,7 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
 
     if data == "cancel":
         await state.clear()
-        await callback.message.edit_text("❌ Пополнение отменено")
+        await callback.message.edit_text(Texts.DEPOSIT_CANCELLED)
         await callback.answer()
         return
 
@@ -216,7 +239,7 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
 
     if not amount:
         await state.clear()
-        await callback.message.edit_text("❌ Ошибка: сумма не выбрана")
+        await callback.message.edit_text(Texts.ERROR_GENERIC)
         await callback.answer()
         return
 
