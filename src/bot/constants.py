@@ -30,6 +30,16 @@ class CallbackData:
     # Help
     HELP = "help"
 
+    # Subscription
+    TRIAL_SUBSCRIPTION = "trial_subscription"
+    TRIAL_ACTIVATE = "trial_activate"
+    BUY_SUBSCRIPTION = "buy_subscription"
+
+    # Tariffs
+    TARIFF_1_MONTH = "tariff_1_month"
+    TARIFF_3_MONTHS = "tariff_3_months"
+    TARIFF_12_MONTHS = "tariff_12_months"
+
 
 class Commands:
     """Bot command constants."""

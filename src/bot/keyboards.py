@@ -19,6 +19,10 @@ class Keyboards:
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [
+                    InlineKeyboardButton(text="🧪 Тестовая подписка", callback_data=CallbackData.TRIAL_SUBSCRIPTION),
+                    InlineKeyboardButton(text="💎 Купить подписку", callback_data=CallbackData.BUY_SUBSCRIPTION),
+                ],
+                [
                     InlineKeyboardButton(text="💰 Баланс", callback_data=CallbackData.BALANCE),
                     InlineKeyboardButton(text="➕ Пополнить", callback_data=CallbackData.DEPOSIT),
                 ],
@@ -158,6 +162,30 @@ class Keyboards:
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 buttons if buttons else [],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
+            ]
+        )
+
+    # Trial subscription keyboard
+    @staticmethod
+    def trial_subscription() -> InlineKeyboardMarkup:
+        """Trial subscription keyboard."""
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Активировать", callback_data=CallbackData.TRIAL_ACTIVATE)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
+            ]
+        )
+
+    # Buy subscription tariff selection
+    @staticmethod
+    def buy_subscription() -> InlineKeyboardMarkup:
+        """Buy subscription tariff selection keyboard."""
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="1 месяц — 299 ₽", callback_data=CallbackData.TARIFF_1_MONTH)],
+                [InlineKeyboardButton(text="3 месяца — 799 ₽", callback_data=CallbackData.TARIFF_3_MONTHS)],
+                [InlineKeyboardButton(text="12 месяцев — 2499 ₽", callback_data=CallbackData.TARIFF_12_MONTHS)],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )

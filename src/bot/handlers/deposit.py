@@ -493,28 +493,24 @@ async def cmd_balance(message: Message) -> None:
     try:
         async with async_session_maker() as session:
             from src.services.user import UserService
+            from src.bot.texts import Texts
 
             user_service = UserService(session)
             user = await user_service.get_user_by_telegram_id(message.from_user.id)
 
             if not user:
-                await message.answer(
-                    "❌ Вы не зарегистрированы.\n"
-                    "Используйте /start для регистрации."
-                )
+                await message.answer(Texts.ERROR_NOT_REGISTERED)
                 return
 
-        await message.answer(
-            f"💰 <b>Ваш баланс</b>\n\n"
-            f"Сумма: {user.balance} ₽\n"
-            f"Реферальный код: <code>{user.referral_code}</code>\n\n"
-            f"Для пополнения используйте /deposit",
-            parse_mode="HTML",
+        balance_text = Texts.BALANCE_INFO.format(
+            balance=user.balance,
+            referral_code=user.referral_code,
         )
+        await message.answer(balance_text, parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Failed to get balance: {e}")
-        await message.answer("❌ Ошибка получения баланса")
+        await message.answer(Texts.ERROR_BALANCE)
 
 
 def register_deposit_handlers(dp: Dispatcher) -> None:
