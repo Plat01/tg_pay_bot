@@ -7,6 +7,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from src.bot.constants import CallbackData
 from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
 from src.config import settings
@@ -253,8 +254,6 @@ async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMCont
 
 def register_start_handlers(dp: Dispatcher) -> None:
     """Register start command and main menu callback handlers."""
-    from src.bot.constants import CallbackData
-
     # Command handlers
     dp.message.register(cmd_start, CommandStart())
 
