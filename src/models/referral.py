@@ -1,6 +1,7 @@
 """Referral earning model."""
 
 import enum
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -25,10 +26,10 @@ class ReferralEarning(SQLModel, table=True):
 
     __tablename__ = "referral_earnings"
 
-    id: int | None = Field(default=None, primary_key=True)
-    referrer_id: int = Field(foreign_key="users.id", index=True)
-    referral_id: int = Field(foreign_key="users.id", index=True)
-    payment_id: int = Field(foreign_key="payments.id", index=True)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, index=True)
+    referrer_id: uuid.UUID = Field(foreign_key="users.id", index=True)
+    referral_id: uuid.UUID = Field(foreign_key="users.id", index=True)
+    payment_id: uuid.UUID = Field(foreign_key="payments.id", index=True)
     
     # Earning details
     amount: Decimal = Field(decimal_places=2)
@@ -55,9 +56,9 @@ class ReferralEarning(SQLModel, table=True):
 
         json_schema_extra = {
             "example": {
-                "referrer_id": 1,
-                "referral_id": 2,
-                "payment_id": 100,
+                "referrer_id": "123e4567-e89b-12d3-a456-426614174000",
+                "referral_id": "123e4567-e89b-12d3-a456-426614174001",
+                "payment_id": "123e4567-e89b-12d3-a456-426614174002",
                 "amount": "100.00",
                 "percent": "10.00",
                 "status": "pending",

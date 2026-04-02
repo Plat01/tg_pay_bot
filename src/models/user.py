@@ -1,5 +1,6 @@
 """User model."""
 
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
@@ -9,6 +10,7 @@ from sqlmodel import Field, Relationship, SQLModel
 if TYPE_CHECKING:
     from src.models.payment import Payment
     from src.models.referral import ReferralEarning
+    from src.models.subscription import Subscription
 
 
 class User(SQLModel, table=True):
@@ -16,7 +18,7 @@ class User(SQLModel, table=True):
 
     __tablename__ = "users"
 
-    id: int | None = Field(default=None, primary_key=True)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, index=True)
     telegram_id: str = Field(unique=True, index=True, max_length=50)
     username: str | None = Field(default=None, max_length=255)
     first_name: str | None = Field(default=None, max_length=255)
@@ -27,13 +29,13 @@ class User(SQLModel, table=True):
     
     # Referral fields
     referral_code: str = Field(unique=True, index=True, max_length=20)
-    referred_by_id: int | None = Field(default=None, foreign_key="users.id")
+    referred_by_id: uuid.UUID | None = Field(default=None, foreign_key="users.id")
     balance: Decimal = Field(default=Decimal("0.00"), decimal_places=2)
     
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-
+    
     # Relationships
     payments: list["Payment"] = Relationship(back_populates="user")
     referral_earnings: list["ReferralEarning"] = Relationship(
@@ -44,6 +46,7 @@ class User(SQLModel, table=True):
         back_populates="referral",
         sa_relationship_kwargs={"foreign_keys": "[ReferralEarning.referral_id]"}
     )
+    subscriptions: list["Subscription"] = Relationship(back_populates="user")
 
     class Config:
         """Pydantic config."""

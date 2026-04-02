@@ -5,6 +5,7 @@ external payment providers and managing the payment lifecycle.
 """
 
 import logging
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -12,7 +13,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
-from src.infrastructure.database.repositories import PaymentRepository
+from src.infrastructure.database.repositories import PaymentRepository, UserRepository
 from src.infrastructure.payments import (
     PaymentProvider,
     PaymentProviderFactory,
@@ -57,10 +58,28 @@ class PaymentService:
             provider_name: Payment provider name (default from settings).
         """
         self.repository = PaymentRepository(session)
+        self.user_repository = UserRepository(session)
         self.referral_service = ReferralService(session)
         self.provider_name = provider_name or settings.default_payment_provider
         self._provider: PaymentProvider | None = None
         self._closed: bool = False
+
+    async def _get_user_id_by_telegram_id(self, telegram_id: str) -> uuid.UUID:
+        """Resolve Telegram ID to user UUID.
+
+        Args:
+            telegram_id: Telegram user ID as string.
+
+        Returns:
+            User UUID from database.
+
+        Raises:
+            ValueError: If user not found.
+        """
+        user = await self.user_repository.get_by_telegram_id(telegram_id)
+        if user is None:
+            raise ValueError(f"User with telegram_id {telegram_id} not found")
+        return user.id
 
     @property
     def provider(self) -> PaymentProvider:
@@ -86,7 +105,7 @@ class PaymentService:
 
     async def create_payment(
         self,
-        user_id: int,
+        telegram_id: str,
         amount: Decimal,
         currency: str = "RUB",
         description: str | None = None,
@@ -100,7 +119,7 @@ class PaymentService:
         external payment. Use create_external_payment for full flow.
 
         Args:
-            user_id: Telegram user ID.
+            telegram_id: Telegram user ID as string.
             amount: Payment amount.
             currency: Currency code (default: 'RUB').
             description: Payment description.
@@ -111,6 +130,8 @@ class PaymentService:
         Returns:
             Created Payment model instance.
         """
+        user_id = await self._get_user_id_by_telegram_id(telegram_id)
+        
         payment_data = {
             "user_id": user_id,
             "amount": amount,
@@ -126,6 +147,7 @@ class PaymentService:
             f"Creating payment record",
             extra={
                 "user_id": user_id,
+                "telegram_id": telegram_id,
                 "amount": str(amount),
                 "currency": currency,
                 "provider": payment_provider or self.provider_name,
@@ -136,7 +158,7 @@ class PaymentService:
 
     async def create_external_payment(
         self,
-        user_id: int,
+        telegram_id: str,
         amount: Decimal,
         currency: str = "RUB",
         description: str | None = None,
@@ -153,7 +175,7 @@ class PaymentService:
         3. Returns both database record and provider result
 
         Args:
-            user_id: Telegram user ID.
+            telegram_id: Telegram user ID as string.
             amount: Payment amount.
             currency: Currency code (default: 'RUB').
             description: Payment description.
@@ -169,9 +191,12 @@ class PaymentService:
             PaymentCreationError: If provider fails to create payment.
             PaymentProviderUnavailable: If provider is unreachable.
         """
+        user_id = await self._get_user_id_by_telegram_id(telegram_id)
+        
         logger.info(
             f"Creating external payment",
             extra={
+                "telegram_id": telegram_id,
                 "user_id": user_id,
                 "amount": str(amount),
                 "currency": currency,
@@ -184,8 +209,8 @@ class PaymentService:
         external_result = await self.provider.create_payment(
             amount=amount,
             currency=currency,
-            description=description or f"Пополнение баланса пользователя {user_id}",
-            metadata={"user_id": user_id},
+            description=description or f"Пополнение баланса пользователя {telegram_id}",
+            metadata={"telegram_id": telegram_id, "user_id": str(user_id)},
             payment_method=payment_method,
             return_url=return_url,
             failed_url=failed_url,
@@ -194,7 +219,7 @@ class PaymentService:
 
         # Save to database
         payment = await self.create_payment(
-            user_id=user_id,
+            telegram_id=telegram_id,
             amount=amount,
             currency=currency,
             description=description,
@@ -208,13 +233,14 @@ class PaymentService:
             extra={
                 "payment_id": payment.id,
                 "external_id": external_result.external_id,
+                "telegram_id": telegram_id,
                 "user_id": user_id,
             },
         )
 
         return payment, external_result
 
-    async def get_payment_by_id(self, payment_id: int) -> Payment | None:
+    async def get_payment_by_id(self, payment_id: uuid.UUID) -> Payment | None:
         """Get payment by ID.
 
         Args:
@@ -238,18 +264,19 @@ class PaymentService:
 
     async def get_user_payments(
         self,
-        user_id: int,
+        telegram_id: str,
         status: PaymentStatus | None = None,
     ) -> list[Payment]:
         """Get all payments for a user.
 
         Args:
-            user_id: Telegram user ID.
+            telegram_id: Telegram user ID as string.
             status: Filter by status (optional).
 
         Returns:
             List of Payment instances.
         """
+        user_id = await self._get_user_id_by_telegram_id(telegram_id)
         return await self.repository.get_user_payments(user_id, status)
 
     async def check_and_update_status(

@@ -1,6 +1,7 @@
 """Payment model."""
 
 import enum
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, Optional
@@ -33,8 +34,8 @@ class Payment(SQLModel, table=True):
 
     __tablename__ = "payments"
 
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id", index=True)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, index=True)
+    user_id: uuid.UUID = Field(foreign_key="users.id", index=True)
     amount: Decimal = Field(decimal_places=2)
     currency: str = Field(max_length=3, default="RUB")
     status: PaymentStatus = Field(default=PaymentStatus.PENDING)
@@ -58,7 +59,7 @@ class Payment(SQLModel, table=True):
 
         json_schema_extra = {
             "example": {
-                "user_id": 1,
+                "user_id": "123e4567-e89b-12d3-a456-426614174000",
                 "amount": "1000.00",
                 "currency": "RUB",
                 "status": "pending",

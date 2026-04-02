@@ -1,5 +1,6 @@
 """User repository for database operations."""
 
+import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +33,7 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def get_referrals(self, user_id: int, skip: int = 0, limit: int = 100) -> list[User]:
+    async def get_referrals(self, user_id: uuid.UUID, skip: int = 0, limit: int = 100) -> list[User]:
         """Get all users referred by this user."""
         statement = (
             select(User)

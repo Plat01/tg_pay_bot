@@ -15,20 +15,20 @@ class Keyboards:
     # Main menu keyboard (Inline - buttons under message)
     @staticmethod
     def main_menu() -> InlineKeyboardMarkup:
-        """Main menu inline keyboard."""
+        """Main menu inline keyboard with new buttons as per requirements."""
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="🧪 Тестовая подписка", callback_data=CallbackData.TRIAL_SUBSCRIPTION),
-                    InlineKeyboardButton(text="💎 Купить подписку", callback_data=CallbackData.BUY_SUBSCRIPTION),
+                    InlineKeyboardButton(text="ℹ️ Инфо", callback_data=CallbackData.INFO),
+                    InlineKeyboardButton(text="💼 Профиль", callback_data=CallbackData.PROFILE),
                 ],
                 [
-                    InlineKeyboardButton(text="💰 Баланс", callback_data=CallbackData.BALANCE),
-                    InlineKeyboardButton(text="➕ Пополнить", callback_data=CallbackData.DEPOSIT),
+                    InlineKeyboardButton(text="💳 Оплатить", callback_data=CallbackData.PAY),
+                    InlineKeyboardButton(text="🛠️ Поддержка", callback_data=CallbackData.SUPPORT),
                 ],
                 [
-                    InlineKeyboardButton(text="👥 Пригласить друга", callback_data=CallbackData.REFERRAL),
-                    InlineKeyboardButton(text="📖 Помощь", callback_data=CallbackData.HELP),
+                    InlineKeyboardButton(text="🎁 Бонусы", callback_data=CallbackData.BONUSES),
+                    InlineKeyboardButton(text="🔗 Подключиться", callback_data=CallbackData.CONNECT),
                 ],
             ]
         )

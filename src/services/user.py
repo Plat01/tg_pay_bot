@@ -2,6 +2,7 @@
 
 import random
 import string
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
@@ -88,11 +89,11 @@ class UserService:
         """Get user by referral code."""
         return await self.repository.get_by_referral_code(referral_code)
 
-    async def get_referrals(self, user_id: int) -> list[User]:
+    async def get_referrals(self, user_id: uuid.UUID) -> list[User]:
         """Get all users referred by this user."""
         return await self.repository.get_referrals(user_id)
 
-    async def get_by_id(self, user_id: int) -> User | None:
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
         """Get user by internal ID."""
         return await self.repository.get_by_id(user_id)
 

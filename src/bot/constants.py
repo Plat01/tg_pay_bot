@@ -12,6 +12,14 @@ class CallbackData:
     CANCEL = "cancel"
     MAIN_MENU = "main_menu"
 
+    # Main menu buttons
+    INFO = "info"
+    PROFILE = "profile"
+    PAY = "pay"
+    SUPPORT = "support"
+    BONUSES = "bonuses"
+    CONNECT = "connect"
+
     # Deposit
     DEPOSIT = "deposit"
     DEPOSIT_SBP = "deposit_sbp"
@@ -84,3 +92,14 @@ class Emoji:
     ARROW_RIGHT = "➡️"
     REFRESH = "🔄"
     WAVE = "👋"
+    
+    # New emoji for main menu
+    INFO = "ℹ️"
+    PROFILE = "💼"
+    PAY = "💳"
+    SUPPORT = "🛠️"
+    BONUSES = "🎁"
+    CONNECT = "🔗"
+    USER = "👤"
+    CALENDAR = "📅"
+    DEVICES = "📱"

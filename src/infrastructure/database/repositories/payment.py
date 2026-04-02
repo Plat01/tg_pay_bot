@@ -1,5 +1,6 @@
 """Payment repository for database operations."""
 
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -24,7 +25,7 @@ class PaymentRepository(BaseRepository[Payment]):
 
     async def get_user_payments(
         self,
-        user_id: int,
+        user_id: uuid.UUID,
         status: PaymentStatus | None = None,
         skip: int = 0,
         limit: int = 100,

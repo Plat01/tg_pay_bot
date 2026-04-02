@@ -16,6 +16,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from src.bot.texts import Texts
 from src.config import settings
 from src.infrastructure.database import async_session_maker
+from src.infrastructure.database.repositories import UserRepository
 from src.infrastructure.payments import PlategaPaymentMethod
 from src.models.payment import PaymentStatus
 from src.services.payment import PaymentService
@@ -261,7 +262,7 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
         async with async_session_maker() as session:
             payment_service = PaymentService(session)
             payment, result = await payment_service.create_external_payment(
-                user_id=callback.from_user.id,
+                telegram_id=str(callback.from_user.id),
                 amount=amount,
                 payment_method=payment_method,
                 description=f"Пополнение баланса",
@@ -372,6 +373,7 @@ async def cmd_check_payment(message: Message) -> None:
     try:
         async with async_session_maker() as session:
             payment_service = PaymentService(session)
+            user_repository = UserRepository(session)
 
             # Get payment from database
             payment = await payment_service.get_payment_by_id(payment_id)
@@ -381,7 +383,9 @@ async def cmd_check_payment(message: Message) -> None:
                 return
 
             # Check if user owns this payment
-            if payment.user_id != message.from_user.id:
+            # Get user's UUID from telegram_id for comparison
+            user = await user_repository.get_by_telegram_id(str(message.from_user.id))
+            if not user or payment.user_id != user.id:
                 await message.answer("❌ Это не ваш платёж")
                 return
 
@@ -456,6 +460,7 @@ async def check_payment_callback(callback: CallbackQuery) -> None:
     try:
         async with async_session_maker() as session:
             payment_service = PaymentService(session)
+            user_repository = UserRepository(session)
 
             payment = await payment_service.get_payment_by_id(payment_id)
 
@@ -464,7 +469,9 @@ async def check_payment_callback(callback: CallbackQuery) -> None:
                 await callback.answer()
                 return
 
-            if payment.user_id != callback.from_user.id:
+            # Check if user owns this payment
+            user = await user_repository.get_by_telegram_id(str(callback.from_user.id))
+            if not user or payment.user_id != user.id:
                 await callback.answer("❌ Это не ваш платёж", show_alert=True)
                 return
 

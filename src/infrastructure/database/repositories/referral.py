@@ -1,5 +1,6 @@
 """Referral earning repository for database operations."""
 
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
@@ -19,7 +20,7 @@ class ReferralEarningRepository(BaseRepository[ReferralEarning]):
 
     async def get_referrer_earnings(
         self,
-        referrer_id: int,
+        referrer_id: uuid.UUID,
         status: ReferralEarningStatus | None = None,
         skip: int = 0,
         limit: int = 100,
@@ -32,7 +33,7 @@ class ReferralEarningRepository(BaseRepository[ReferralEarning]):
         result = await self.session.execute(statement)
         return list(result.scalars().all())
 
-    async def get_total_pending_earnings(self, referrer_id: int) -> Decimal:
+    async def get_total_pending_earnings(self, referrer_id: uuid.UUID) -> Decimal:
         """Get total pending earnings for a referrer."""
         statement = select(ReferralEarning).where(
             ReferralEarning.referrer_id == referrer_id,

@@ -1,5 +1,6 @@
 """Referral service for business logic."""
 
+import uuid
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,17 +51,17 @@ class ReferralService:
 
     async def get_referrer_earnings(
         self,
-        referrer_id: int,
+        referrer_id: uuid.UUID,
         status: ReferralEarningStatus | None = None,
     ) -> list[ReferralEarning]:
         """Get all earnings for a referrer."""
         return await self.repository.get_referrer_earnings(referrer_id, status)
 
-    async def get_total_pending_earnings(self, referrer_id: int) -> Decimal:
+    async def get_total_pending_earnings(self, referrer_id: uuid.UUID) -> Decimal:
         """Get total pending earnings for a referrer."""
         return await self.repository.get_total_pending_earnings(referrer_id)
 
-    async def get_referral_stats(self, user_id: int) -> dict:
+    async def get_referral_stats(self, user_id: uuid.UUID) -> dict:
         """Get referral statistics for a user."""
         referrals = await self.user_repository.get_referrals(user_id)
         total_earnings = await self.repository.get_total_pending_earnings(user_id)
