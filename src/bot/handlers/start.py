@@ -260,10 +260,9 @@ async def handle_bonuses_callback(callback: CallbackQuery) -> None:
 
 
 async def handle_connect_callback(callback: CallbackQuery) -> None:
-    """Handle 🔗 Подключиться button from main menu."""
+    """Handle 👥 Пригласить друга button from main menu."""
     async with async_session_maker() as session:
         user_service = UserService(session)
-        subscription_service = SubscriptionService(session)
         
         user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
         
@@ -278,27 +277,21 @@ async def handle_connect_callback(callback: CallbackQuery) -> None:
         # Build referral link
         referral_link = f"{settings.bot_link}?start={user.referral_code}"
         
-        # Get subscription status using user UUID
-        subscription = await subscription_service.get_active_subscription(user.id)
-        if subscription:
-            subscription_status = "✅ Активна"
-            subscription_end = subscription.end_date.strftime("%d.%m.%Y")
-        else:
-            subscription_status = "❌ Не активна"
-            subscription_end = "—"
-        
         connect_text = Texts.CONNECT_TEXT.format(
             referral_link=referral_link,
-            subscription_status=subscription_status,
-            subscription_end=subscription_end,
         )
         
-        # Add button with link to subscription
+        # Add button to share referral link
         from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
         
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="🔗 Получить ключ доступа", url=referral_link)],
+                [
+                    InlineKeyboardButton(
+                        text="📤 Отправить друзьям",
+                        switch_inline_query=referral_link,
+                    )
+                ],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )

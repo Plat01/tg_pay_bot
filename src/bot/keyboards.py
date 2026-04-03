@@ -29,10 +29,9 @@ class Keyboards:
                 ],
                 [
                     InlineKeyboardButton(text="🛠️ Поддержка", callback_data=CallbackData.SUPPORT),
-                    InlineKeyboardButton(text="🎁 Бонусы", callback_data=CallbackData.BONUSES),
                 ],
                 [
-                    InlineKeyboardButton(text="🔗 Подключиться", callback_data=CallbackData.CONNECT),
+                    InlineKeyboardButton(text="👥 Пригласить друга", callback_data=CallbackData.CONNECT),
                 ],
             ]
         )
