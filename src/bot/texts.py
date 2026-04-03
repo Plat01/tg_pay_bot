@@ -12,8 +12,8 @@ class Texts:
 
     # Start command - new welcome message as per image
     START_WELCOME = (
-        "👋 <b>Привет, Дорогой друг!</b>\n\n"
-        "<b>PASS VPN</b> – включил и забыл.\n"
+        f"👋 <b>Привет, Дорогой друг!</b>\n\n"
+        f"<b>{settings.bot_name}</b> – включил и забыл.\n"
         "✅ Неограниченный трафик\n"
         "💰 Доступные тарифы\n"
         "📶 Много разных локаций\n"
@@ -32,10 +32,16 @@ class Texts:
 
     START_MAIN_MENU = START_WELCOME
 
-    # Info message
+    # Info menu - message text
+    INFO_MENU_TEXT = (
+        "ℹ️ <b>Инфо</b>\n\n"
+        "Выберите раздел:"
+    )
+    
+    # Info message (old - kept for reference)
     INFO_TEXT = (
-        "ℹ️ <b>О сервисе PASS VPN</b>\n\n"
-        "<b>PASS VPN</b> – включил и забыл.\n"
+        f"ℹ️ <b>О сервисе {settings.bot_name}</b>\n\n"
+        f"<b>{settings.bot_name}</b> – включил и забыл.\n"
         "✅ Неограниченный трафик\n"
         "💰 Доступные тарифы\n"
         "📶 Много разных локаций\n"
@@ -75,10 +81,15 @@ class Texts:
 
     # Support message
     SUPPORT_TEXT = (
-        "🛠️ <b>Поддержка</b>\n\n"
-        "Если у вас возникли вопросы или проблемы,\n"
-        "напишите нам: @support_username\n\n"
-        "Мы поможем вам в ближайшее время!"
+        "Для того, чтобы мы быстро вас нашли, "
+        "скопируйте ваш ID заранее и отправьте в "
+        "поддержку с проблемой, которая у вас "
+        "случилась.\n\n"
+        "📋 <b>Ваш ID для копирования:</b>\n\n"
+        "<code>Вот мой ID {user_id}</code>\n\n"
+        "👇 Нажмите на текст выше, чтобы "
+        "скопировать ваш ID, затем перейдите в "
+        "поддержку."
     )
 
     # Bonuses message

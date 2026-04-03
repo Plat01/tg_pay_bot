@@ -113,9 +113,9 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
 async def handle_info_callback(callback: CallbackQuery) -> None:
     """Handle ℹ️ Инфо button from main menu."""
     await callback.message.edit_text(
-        Texts.INFO_TEXT,
+        Texts.INFO_MENU_TEXT,
         parse_mode="HTML",
-        reply_markup=Keyboards.back_to_menu(),
+        reply_markup=Keyboards.info_menu(),
     )
     await callback.answer()
 
@@ -139,6 +139,14 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
         # Get active subscription using user UUID
         subscription = await subscription_service.get_active_subscription(user.id)
         
+        # Build display name: first_name last_name, or username if not available
+        name_parts = []
+        if user.first_name:
+            name_parts.append(user.first_name)
+        if user.last_name:
+            name_parts.append(user.last_name)
+        display_name = " ".join(name_parts) if name_parts else (user.username or f"#{user.id}")
+        
         if subscription:
             # Format subscription info
             sub_info = subscription_service.get_subscription_info(subscription)
@@ -146,24 +154,31 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
             time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
             
             profile_text = Texts.PROFILE_TEXT.format(
-                username=user.username or f"#{user.id}",
+                username=display_name,
                 subscription_end=end_date_str,
                 time_left=time_left_str,
                 device_limit=subscription.device_limit,
                 subscription_type=subscription.subscription_type,
                 balance=user.balance,
             )
+            
+            await callback.message.edit_text(
+                profile_text,
+                parse_mode="HTML",
+                reply_markup=Keyboards.back_to_menu(),
+            )
         else:
             profile_text = Texts.PROFILE_NO_SUBSCRIPTION.format(
-                username=user.username or f"#{user.id}",
+                username=display_name,
                 balance=user.balance,
             )
-        
-        await callback.message.edit_text(
-            profile_text,
-            parse_mode="HTML",
-            reply_markup=Keyboards.back_to_menu(),
-        )
+            
+            # Show pay button when no subscription
+            await callback.message.edit_text(
+                profile_text,
+                parse_mode="HTML",
+                reply_markup=Keyboards.buy_subscription(),
+            )
         await callback.answer()
 
 
@@ -179,12 +194,37 @@ async def handle_pay_callback(callback: CallbackQuery) -> None:
 
 async def handle_support_callback(callback: CallbackQuery) -> None:
     """Handle 🛠️ Поддержка button from main menu."""
-    await callback.message.edit_text(
-        Texts.SUPPORT_TEXT,
-        parse_mode="HTML",
-        reply_markup=Keyboards.back_to_menu(),
-    )
-    await callback.answer()
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    
+    async with async_session_maker() as session:
+        user_service = UserService(session)
+        user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
+        
+        if not user:
+            await callback.message.edit_text(
+                Texts.ERROR_NOT_REGISTERED,
+                reply_markup=Keyboards.back_to_menu(),
+            )
+            await callback.answer()
+            return
+        
+        # Format support text with user ID
+        support_text = Texts.SUPPORT_TEXT.format(user_id=user.telegram_id)
+        
+        # Create keyboard with support link button
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="💬 Перейти в поддержку", url=settings.support_link)],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
+            ]
+        )
+        
+        await callback.message.edit_text(
+            support_text,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+        await callback.answer()
 
 
 async def handle_bonuses_callback(callback: CallbackQuery) -> None:

@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # Telegram Bot
     bot_token: str
     bot_link: str = "https://t.me/testAiogram12Bot"  # Link to the bot for referral links
+    bot_name: str = "testAiogram12Bot"  # Name of the bot for display in messages
+    support_link: str = "https://t.me/support"  # Link to support channel/chat
+    
+    # Legal links
+    privacy_policy_link: str = "https://telegra.ph/Politika-konfidencialnosti-08-15-17"
+    user_agreement_link: str = "https://telegra.ph/Polzovatelskoe-soglashenie-08-15-10"
 
     # Database
     db_host: str = "localhost"

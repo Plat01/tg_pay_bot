@@ -7,6 +7,7 @@ for easy editing and consistent UI.
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 
 from src.bot.constants import CallbackData
+from src.config import settings
 
 
 class Keyboards:
@@ -24,11 +25,32 @@ class Keyboards:
                 ],
                 [
                     InlineKeyboardButton(text="💳 Оплатить", callback_data=CallbackData.PAY),
-                    InlineKeyboardButton(text="🛠️ Поддержка", callback_data=CallbackData.SUPPORT),
+                    InlineKeyboardButton(text="🧪 Тестовый период", callback_data=CallbackData.TRIAL_SUBSCRIPTION),
                 ],
                 [
+                    InlineKeyboardButton(text="🛠️ Поддержка", callback_data=CallbackData.SUPPORT),
                     InlineKeyboardButton(text="🎁 Бонусы", callback_data=CallbackData.BONUSES),
+                ],
+                [
                     InlineKeyboardButton(text="🔗 Подключиться", callback_data=CallbackData.CONNECT),
+                ],
+            ]
+        )
+    
+    # Info menu keyboard with legal links
+    @staticmethod
+    def info_menu() -> InlineKeyboardMarkup:
+        """Info menu keyboard with privacy policy and user agreement buttons."""
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🛡 Политика конф.", url=settings.privacy_policy_link),
+                ],
+                [
+                    InlineKeyboardButton(text="📄 Оферта", url=settings.user_agreement_link),
+                ],
+                [
+                    InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU),
                 ],
             ]
         )
