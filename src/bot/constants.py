@@ -48,6 +48,9 @@ class CallbackData:
     TARIFF_3_MONTHS = "tariff_3_months"
     TARIFF_12_MONTHS = "tariff_12_months"
 
+    # Admin
+    SEND_SUBSCRIPTION_LINKS = "send_subscription_links"
+
     # Deposit amounts
     DEPOSIT_AMOUNT_50 = "deposit_50"
     DEPOSIT_AMOUNT_100 = "deposit_100"
@@ -65,6 +68,7 @@ class Commands:
     BALANCE = "balance"
     DEPOSIT = "deposit"
     REFERRAL = "referral"
+    SEND_SUBSCRIPTION_LINKS = "send_sub_links"
 
 
 class Limits:
@@ -92,7 +96,7 @@ class Emoji:
     ARROW_RIGHT = "➡️"
     REFRESH = "🔄"
     WAVE = "👋"
-    
+
     # New emoji for main menu
     INFO = "ℹ️"
     PROFILE = "💼"

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 import uuid
-from sqlalchemy import select
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database.repositories.base import BaseRepository
@@ -23,17 +23,20 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             .where(Subscription.user_id == user_id)
             .where(Subscription.is_active == True)
             .where(Subscription.end_date > datetime.utcnow())
-            .order_by(Subscription.end_date.desc())
+            .order_by(desc(Subscription.end_date))
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def get_user_subscriptions(self, user_id: uuid.UUID, limit: int = 10) -> list[Subscription]:
+    async def get_user_subscriptions(
+        self, user_id: uuid.UUID, limit: int = 10
+    ) -> list[Subscription]:
         """Get all subscriptions for user by user ID (UUID)."""
         statement = (
             select(Subscription)
             .where(Subscription.user_id == user_id)
-            .order_by(Subscription.created_at.desc())
+            .where(Subscription.is_active == True)  # Only include active subscriptions
+            .order_by(desc(Subscription.created_at))
             .limit(limit)
         )
         result = await self.session.execute(statement)
@@ -42,16 +45,16 @@ class SubscriptionRepository(BaseRepository[Subscription]):
     async def create_subscription(
         self,
         user_id: uuid.UUID,
-        subscription_type: str,
+        product_id: uuid.UUID,
         end_date: datetime,
-        device_limit: int = 1,
+        start_date: datetime,
     ) -> Subscription:
         """Create a new subscription."""
         subscription_data = {
             "user_id": user_id,
-            "subscription_type": subscription_type,
+            "product_id": product_id,
             "end_date": end_date,
-            "device_limit": device_limit,
+            "start_date": start_date,
         }
         return await self.create(subscription_data)
 

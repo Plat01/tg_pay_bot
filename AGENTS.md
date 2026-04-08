@@ -10,13 +10,17 @@
 - Docker + docker-compose
 - UV (менеджер зависимостей)
 
+## Общение с пользователем
+
+- Общаться с пользователем на русском языке
+- Отвечать кратко и по делу
+- Не использовать эмодзи без необходимости
+
 ## Code Style
 
 - Использовать комментарии в коде
 - Типизация: strict mode
 - Асинхронный код везде
-
-
 
 ## Commits
 
@@ -38,13 +42,29 @@
 
 ## Структура проекта
 
+**ВАЖНО:** Перед каждым пушем в git обновлять структуру проекта в этом файле, если были добавлены новые папки или удалены старые!
+
 ```
 src/
-├── bot/           # Инициализация бота
-├── handlers/      # Обработчики команд
-├── models/        # SQLModel модели
-├── repositories/  # Слой доступа к данным
-├── services/      # Бизнес-логика
-├── db/            # Сессии БД
-└── config.py      # Pydantic Settings
+├── bot/                      # Telegram бот
+│   ├── handlers/             # Обработчики команд и сообщений
+│   ├── bot.py                # Инициализация бота и диспетчера
+│   ├── keyboards.py          # Клавиатуры (inline/reply)
+│   ├── texts.py              # Тексты сообщений
+│   └── constants.py          # Константы бота
+├── infrastructure/           # Инфраструктурный слой
+│   ├── database/             # Работа с БД
+│   │   ├── repositories/      # Репозитории для доступа к данным
+│   │   └── session.py         # Сессии БД
+│   └── payments/              # Интеграции с платежными системами
+│       ├── base.py            # Базовый класс платежной системы
+│       ├── platega.py         # Интеграция с Platega
+│       ├── factory.py         # Фабрика платежных систем
+│       ├── schemas.py         # Pydantic схемы для платежей
+│       └── exceptions.py      # Исключения платежных систем
+├── models/                   # SQLModel модели (User, Payment, Subscription, etc.)
+├── services/                 # Бизнес-логика (payment, user, subscription, referral)
+├── repositories/             # (устарело, использовать infrastructure/database/repositories)
+├── config.py                 # Конфигурация через pydantic-settings
+└── main.py                   # Точка входа
 ```

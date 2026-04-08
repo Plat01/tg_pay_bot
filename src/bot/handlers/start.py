@@ -70,7 +70,7 @@ async def cmd_start(message: Message) -> None:
             parse_mode="HTML",
             reply_markup=Keyboards.main_menu(),
         )
-        
+
         logger.info(f"User started bot: {user.id} (@{user.username})")
 
 
@@ -79,7 +79,7 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
     async with async_session_maker() as session:
         user_service = UserService(session)
         subscription_service = SubscriptionService(session)
-        
+
         db_user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
 
         if not db_user:
@@ -125,9 +125,9 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
     async with async_session_maker() as session:
         user_service = UserService(session)
         subscription_service = SubscriptionService(session)
-        
+
         user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
-        
+
         if not user:
             await callback.message.edit_text(
                 Texts.ERROR_NOT_REGISTERED,
@@ -135,10 +135,10 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
             )
             await callback.answer()
             return
-        
+
         # Get active subscription using user UUID
         subscription = await subscription_service.get_active_subscription(user.id)
-        
+
         # Build display name: first_name last_name, or username if not available
         name_parts = []
         if user.first_name:
@@ -146,22 +146,27 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
         if user.last_name:
             name_parts.append(user.last_name)
         display_name = " ".join(name_parts) if name_parts else (user.username or f"#{user.id}")
-        
+
         if subscription:
             # Format subscription info
             sub_info = subscription_service.get_subscription_info(subscription)
             end_date_str = subscription.end_date.strftime("%d.%m.%Y %H:%M")
             time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
-            
+
+            # Get product information
+            device_limit = subscription.product.device_limit if subscription.product else 1
+            subscription_type = (
+                subscription.product.subscription_type.value if subscription.product else "unknown"
+            )
+
             profile_text = Texts.PROFILE_TEXT.format(
                 username=display_name,
                 subscription_end=end_date_str,
                 time_left=time_left_str,
-                device_limit=subscription.device_limit,
-                subscription_type=subscription.subscription_type,
-                balance=user.balance,
+                device_limit=device_limit,
+                subscription_type=subscription_type,
             )
-            
+
             await callback.message.edit_text(
                 profile_text,
                 parse_mode="HTML",
@@ -172,7 +177,7 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
                 username=display_name,
                 balance=user.balance,
             )
-            
+
             # Show pay button when no subscription
             await callback.message.edit_text(
                 profile_text,
@@ -195,11 +200,11 @@ async def handle_pay_callback(callback: CallbackQuery) -> None:
 async def handle_support_callback(callback: CallbackQuery) -> None:
     """Handle 🛠️ Поддержка button from main menu."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-    
+
     async with async_session_maker() as session:
         user_service = UserService(session)
         user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
-        
+
         if not user:
             await callback.message.edit_text(
                 Texts.ERROR_NOT_REGISTERED,
@@ -207,10 +212,10 @@ async def handle_support_callback(callback: CallbackQuery) -> None:
             )
             await callback.answer()
             return
-        
+
         # Format support text with user ID
         support_text = Texts.SUPPORT_TEXT.format(user_id=user.telegram_id)
-        
+
         # Create keyboard with support link button
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -218,7 +223,7 @@ async def handle_support_callback(callback: CallbackQuery) -> None:
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
-        
+
         await callback.message.edit_text(
             support_text,
             parse_mode="HTML",
@@ -232,7 +237,7 @@ async def handle_bonuses_callback(callback: CallbackQuery) -> None:
     async with async_session_maker() as session:
         user_service = UserService(session)
         user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
-        
+
         if not user:
             await callback.message.edit_text(
                 Texts.ERROR_NOT_REGISTERED,
@@ -240,7 +245,7 @@ async def handle_bonuses_callback(callback: CallbackQuery) -> None:
             )
             await callback.answer()
             return
-        
+
         # Check if user was referred (eligible for trial bonus)
         if user.referred_by_id:
             # User was referred - show bonus info with trial option
@@ -263,9 +268,9 @@ async def handle_connect_callback(callback: CallbackQuery) -> None:
     """Handle 👥 Пригласить друга button from main menu."""
     async with async_session_maker() as session:
         user_service = UserService(session)
-        
+
         user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
-        
+
         if not user:
             await callback.message.edit_text(
                 Texts.ERROR_NOT_REGISTERED,
@@ -273,17 +278,17 @@ async def handle_connect_callback(callback: CallbackQuery) -> None:
             )
             await callback.answer()
             return
-        
+
         # Build referral link
         referral_link = f"{settings.bot_link}?start={user.referral_code}"
-        
+
         connect_text = Texts.CONNECT_TEXT.format(
             referral_link=referral_link,
         )
-        
+
         # Add button to share referral link
         from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-        
+
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -295,7 +300,7 @@ async def handle_connect_callback(callback: CallbackQuery) -> None:
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
-        
+
         await callback.message.edit_text(
             connect_text,
             parse_mode="HTML",
@@ -330,7 +335,7 @@ async def handle_balance_callback(callback: CallbackQuery) -> None:
             reply_markup=Keyboards.balance_actions(),
         )
         await callback.answer()
-        
+
         # Send deposit prompt with amount buttons
         await callback.message.answer(
             Texts.BALANCE_DEPOSIT_PROMPT,
@@ -345,7 +350,7 @@ async def handle_deposit_callback(callback: CallbackQuery) -> None:
     Redirects to deposit flow with amount selection keyboard.
     """
     from src.bot.handlers.deposit import MIN_DEPOSIT_AMOUNT
-    
+
     await callback.message.edit_text(
         Texts.DEPOSIT_START.format(min_amount=MIN_DEPOSIT_AMOUNT),
         parse_mode="HTML",
@@ -421,18 +426,18 @@ async def handle_buy_subscription_callback(callback: CallbackQuery) -> None:
 
 async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMContext) -> None:
     """Handle deposit amount selection from balance screen.
-    
+
     Starts deposit flow with selected amount.
     """
     from src.bot.handlers.deposit import (
         DepositStates,
         process_amount_preset,
     )
-    
+
     # DEBUG: Log callback data to diagnose the issue
     logger.warning(f"DEBUG: callback.data = {callback.data!r}")
     logger.warning(f"DEBUG: callback type = {type(callback)}")
-    
+
     # Parse amount from callback data
     amount_map = {
         CallbackData.DEPOSIT_AMOUNT_50: 50,
@@ -442,27 +447,29 @@ async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMCont
         CallbackData.DEPOSIT_AMOUNT_1000: 1000,
         CallbackData.DEPOSIT_AMOUNT_2500: 2500,
     }
-    
+
     amount = amount_map.get(callback.data)
     if not amount:
         logger.warning(f"DEBUG: Invalid callback data, amount not found")
         await callback.answer("❌ Неверная сумма", show_alert=True)
         return
-    
+
     logger.warning(f"DEBUG: amount = {amount}")
-    
+
     # Set FSM state and process amount
     await state.set_state(DepositStates.amount)
-    
+
     # Create a mock callback with data in format "amount:{amount}"
     # WARNING: This will fail because CallbackQuery is frozen in aiogram 3.x
     original_data = callback.data
-    logger.warning(f"DEBUG: Attempting to set callback.data from {original_data!r} to 'amount:{amount}'")
+    logger.warning(
+        f"DEBUG: Attempting to set callback.data from {original_data!r} to 'amount:{amount}'"
+    )
     callback.data = f"amount:{amount}"
-    
+
     # Call the deposit handler
     await process_amount_preset(callback, state)
-    
+
     # Restore original callback data
     callback.data = original_data
 
