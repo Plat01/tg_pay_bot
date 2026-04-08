@@ -2,15 +2,21 @@
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from src.models.user import User
     from src.models.payment import Payment
+
+
+def _utc_now() -> datetime:
+    """Get current UTC datetime (Python 3.12+ compatible)."""
+    return datetime.now(timezone.utc)
 
 
 class ReferralEarningStatus(str, enum.Enum):
@@ -30,24 +36,28 @@ class ReferralEarning(SQLModel, table=True):
     referrer_id: uuid.UUID = Field(foreign_key="users.id", index=True)
     referral_id: uuid.UUID = Field(foreign_key="users.id", index=True)
     payment_id: uuid.UUID = Field(foreign_key="payments.id", index=True)
-    
+
     # Earning details
     amount: Decimal = Field(decimal_places=2)
     percent: Decimal = Field(decimal_places=2)
     status: ReferralEarningStatus = Field(default=ReferralEarningStatus.PENDING)
-    
+
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    paid_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    paid_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
 
     # Relationships
     referrer: "User" = Relationship(
         back_populates="referral_earnings",
-        sa_relationship_kwargs={"foreign_keys": "[ReferralEarning.referrer_id]"}
+        sa_relationship_kwargs={"foreign_keys": "[ReferralEarning.referrer_id]"},
     )
     referral: "User" = Relationship(
         back_populates="earnings_as_referral",
-        sa_relationship_kwargs={"foreign_keys": "[ReferralEarning.referral_id]"}
+        sa_relationship_kwargs={"foreign_keys": "[ReferralEarning.referral_id]"},
     )
     payment: "Payment" = Relationship()
 

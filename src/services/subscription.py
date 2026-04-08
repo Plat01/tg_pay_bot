@@ -1,7 +1,7 @@
 """Subscription service for business logic."""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,13 +39,13 @@ class SubscriptionService:
         if not product:
             raise ValueError(f"Product with ID {product_id} not found")
 
-        end_date = datetime.utcnow() + timedelta(days=product.duration_days)
+        end_date = datetime.now(timezone.utc) + timedelta(days=product.duration_days)
 
         return await self.repository.create_subscription(
             user_id=user_id,
             product_id=product_id,
             end_date=end_date,
-            start_date=datetime.utcnow(),
+            start_date=datetime.now(timezone.utc),
         )
 
     async def create_subscription_by_type(
@@ -64,13 +64,13 @@ class SubscriptionService:
         if not product:
             raise ValueError(f"No product found for subscription type: {subscription_type}")
 
-        end_date = datetime.utcnow() + timedelta(days=product.duration_days)
+        end_date = datetime.now(timezone.utc) + timedelta(days=product.duration_days)
 
         return await self.repository.create_subscription(
             user_id=user_id,
             product_id=product.id,
             end_date=end_date,
-            start_date=datetime.utcnow(),
+            start_date=datetime.now(timezone.utc),
         )
 
     async def activate_trial(
@@ -83,6 +83,37 @@ class SubscriptionService:
             subscription_type="trial",
         )
 
+    async def create_subscription(
+        self,
+        user_id: uuid.UUID,
+        product_id: uuid.UUID,
+        duration_days: int | None = None,
+    ) -> Subscription:
+        """Create a new subscription for user.
+
+        Args:
+            user_id: User UUID to create subscription for.
+            product_id: Product UUID for the subscription.
+            duration_days: Optional duration in days. If not provided, uses product's duration.
+
+        Returns:
+            Created Subscription instance.
+        """
+        if duration_days is None:
+            product = await self.product_repository.get_product_by_id(product_id)
+            if not product:
+                raise ValueError(f"Product with ID {product_id} not found")
+            duration_days = product.duration_days
+
+        end_date = datetime.now(timezone.utc) + timedelta(days=duration_days)
+
+        return await self.repository.create_subscription(
+            user_id=user_id,
+            product_id=product_id,
+            end_date=end_date,
+            start_date=datetime.now(timezone.utc),
+        )
+
     def get_subscription_info(self, subscription: Subscription) -> dict:
         """Get subscription info for display.
 
@@ -92,7 +123,7 @@ class SubscriptionService:
         Returns:
             Dictionary with subscription info.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         time_left = subscription.end_date - now
 
         days_left = time_left.days

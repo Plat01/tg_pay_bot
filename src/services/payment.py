@@ -96,8 +96,7 @@ class PaymentService:
         """
         if self._closed:
             raise RuntimeError(
-                "PaymentService has been closed. "
-                "Create a new instance to use payment operations."
+                "PaymentService has been closed. Create a new instance to use payment operations."
             )
         if self._provider is None:
             self._provider = PaymentProviderFactory.create(self.provider_name)
@@ -131,7 +130,7 @@ class PaymentService:
             Created Payment model instance.
         """
         user_id = await self._get_user_id_by_telegram_id(telegram_id)
-        
+
         payment_data = {
             "user_id": user_id,
             "amount": amount,
@@ -192,7 +191,7 @@ class PaymentService:
             PaymentProviderUnavailable: If provider is unreachable.
         """
         user_id = await self._get_user_id_by_telegram_id(telegram_id)
-        
+
         logger.info(
             f"Creating external payment",
             extra={
@@ -300,8 +299,7 @@ class PaymentService:
         """
         if not payment.external_id:
             raise ValueError(
-                f"Payment {payment.id} has no external_id, "
-                "cannot check status with provider"
+                f"Payment {payment.id} has no external_id, cannot check status with provider"
             )
 
         logger.info(
@@ -376,7 +374,7 @@ class PaymentService:
         payment = await self.repository.update_status(
             payment,
             PaymentStatus.COMPLETED,
-            datetime.utcnow(),
+            datetime.now(timezone.utc),
         )
 
         # Process referral earnings

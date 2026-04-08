@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from sqlalchemy import Column, JSON
+from sqlalchemy import Column, JSON, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -39,17 +39,23 @@ class Payment(SQLModel, table=True):
     amount: Decimal = Field(decimal_places=2)
     currency: str = Field(max_length=3, default="RUB")
     status: PaymentStatus = Field(default=PaymentStatus.PENDING)
-    
+
     # Payment provider info
     payment_provider: str | None = Field(default=None, max_length=50)
     external_id: str | None = Field(default=None, max_length=255, index=True)
     description: str | None = Field(default=None, max_length=500)
     payment_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
-    
+
     # Timestamps
-    created_at: datetime = Field(default_factory=_utc_now)
-    updated_at: datetime = Field(default_factory=_utc_now)
-    completed_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    updated_at: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    completed_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
 
     # Relationships
     user: "User" = Relationship(back_populates="payments")

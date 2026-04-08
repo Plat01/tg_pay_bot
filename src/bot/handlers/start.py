@@ -552,6 +552,8 @@ async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMCont
 
 def register_start_handlers(dp: Dispatcher) -> None:
     """Register start command and main menu callback handlers."""
+    from src.bot.handlers.payment import register_payment_handlers
+
     # Command handlers
     dp.message.register(cmd_start, CommandStart())
 
@@ -616,5 +618,8 @@ def register_start_handlers(dp: Dispatcher) -> None:
         handle_deposit_amount_callback,
         F.data.startswith("deposit_"),
     )
+
+    # Register payment handlers
+    register_payment_handlers(dp)
 
     logger.info("Start and main menu handlers registered")

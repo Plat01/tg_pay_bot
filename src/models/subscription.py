@@ -1,14 +1,20 @@
 """Subscription model."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from src.models.user import User
     from src.models.product import Product
+
+
+def _utc_now() -> datetime:
+    """Get current UTC datetime (Python 3.12+ compatible)."""
+    return datetime.now(timezone.utc)
 
 
 class Subscription(SQLModel, table=True):
@@ -20,10 +26,16 @@ class Subscription(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True)
     product_id: uuid.UUID = Field(foreign_key="products.id", index=True)
     is_active: bool = Field(default=True)
-    end_date: datetime
-    start_date: datetime = Field(default_factory=datetime.utcnow)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    end_date: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    start_date: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    created_at: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    updated_at: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
 
     # Relationships
     user: "User" = Relationship(back_populates="subscriptions")

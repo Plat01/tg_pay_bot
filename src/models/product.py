@@ -1,14 +1,20 @@
 """Product model for subscription products."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from src.models.subscription import Subscription
+
+
+def _utc_now() -> datetime:
+    """Get current UTC datetime (Python 3.12+ compatible)."""
+    return datetime.now(timezone.utc)
 
 
 class SubscriptionType(str, Enum):
@@ -34,8 +40,12 @@ class Product(SQLModel, table=True):
     happ_link: str = Field(
         max_length=2000
     )  # Link for HAP (Human App Platform?) - increased to accommodate long links
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    updated_at: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
 
     # Relationship to subscriptions that use this product
     subscriptions: list["Subscription"] = Relationship(back_populates="product")

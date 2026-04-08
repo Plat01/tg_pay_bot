@@ -1,7 +1,7 @@
 """Referral earning repository for database operations."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -46,7 +46,7 @@ class ReferralEarningRepository(BaseRepository[ReferralEarning]):
     async def mark_as_paid(self, earning: ReferralEarning) -> ReferralEarning:
         """Mark earning as paid."""
         earning.status = ReferralEarningStatus.PAID
-        earning.paid_at = datetime.utcnow()
+        earning.paid_at = datetime.now(timezone.utc)
         await self.session.commit()
         await self.session.refresh(earning)
         return earning

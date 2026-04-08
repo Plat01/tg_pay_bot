@@ -48,6 +48,10 @@ class CallbackData:
     TARIFF_3_MONTHS = "tariff_3_months"
     TARIFF_12_MONTHS = "tariff_12_months"
 
+    # Payment confirmation
+    CONFIRM_PAYMENT = "confirm_payment"  # Format: confirm_payment:{payment_id}
+    PAYMENT_METHOD_SELECT = "payment_method"  # Format: payment_method:{tariff_type}
+
     # Admin
     SEND_SUBSCRIPTION_LINKS = "send_subscription_links"
 

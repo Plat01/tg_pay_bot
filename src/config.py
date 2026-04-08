@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     bot_link: str = "https://t.me/testAiogram12Bot"  # Link to the bot for referral links
     bot_name: str = "testAiogram12Bot"  # Name of the bot for display in messages
     support_link: str = "https://t.me/support"  # Link to support channel/chat
-    
+
     # Legal links
     privacy_policy_link: str = "https://telegra.ph/Politika-konfidencialnosti-08-15-17"
     user_agreement_link: str = "https://telegra.ph/Polzovatelskoe-soglashenie-08-15-10"
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     proxy_url: str = ""
 
     # Platega Payment Provider
-    platega_api_url: str = "https://api.platega.io"
+    platega_api_url: str = "https://app.platega.io"
     platega_merchant_id: str = ""  # X-MerchantId header (UUID)
     platega_secret: str = ""  # X-Secret header (API key)
     platega_webhook_url: str = ""  # URL for receiving webhooks (must be publicly accessible)

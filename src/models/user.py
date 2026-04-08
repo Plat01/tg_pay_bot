@@ -1,16 +1,22 @@
 """User model."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from src.models.payment import Payment
     from src.models.referral import ReferralEarning
     from src.models.subscription import Subscription
+
+
+def _utc_now() -> datetime:
+    """Get current UTC datetime (Python 3.12+ compatible)."""
+    return datetime.now(timezone.utc)
 
 
 class User(SQLModel, table=True):
@@ -34,8 +40,12 @@ class User(SQLModel, table=True):
     balance: Decimal = Field(default=Decimal("0.00"), decimal_places=2)
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    updated_at: datetime = Field(
+        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
 
     # Relationships
     payments: list["Payment"] = Relationship(back_populates="user")

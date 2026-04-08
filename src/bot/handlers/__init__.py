@@ -5,6 +5,7 @@ from aiogram import Dispatcher
 from src.bot.handlers.start import register_start_handlers
 from src.bot.handlers.deposit import register_deposit_handlers
 from src.bot.handlers.admin import register_admin_handlers
+from src.bot.handlers.payment import register_payment_handlers
 
 
 def register_handlers(dp: Dispatcher) -> None:
@@ -12,3 +13,4 @@ def register_handlers(dp: Dispatcher) -> None:
     register_start_handlers(dp)
     register_deposit_handlers(dp)
     register_admin_handlers(dp)
+    register_payment_handlers(dp)

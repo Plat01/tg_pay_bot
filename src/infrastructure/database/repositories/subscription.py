@@ -1,6 +1,6 @@
 """Subscription repository for database operations."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             select(Subscription)
             .where(Subscription.user_id == user_id)
             .where(Subscription.is_active == True)
-            .where(Subscription.end_date > datetime.utcnow())
+            .where(Subscription.end_date > datetime.now(timezone.utc))
             .order_by(desc(Subscription.end_date))
         )
         result = await self.session.execute(statement)

@@ -12,7 +12,9 @@ from aiogram.types import (
 )
 
 from src.bot.constants import CallbackData
+from src.bot.subscription_prices import SUBSCRIPTION_PRICES, get_tariff_data
 from src.config import settings
+from src.infrastructure.payments.schemas import PlategaPaymentMethod
 
 
 class Keyboards:
@@ -270,23 +272,135 @@ class Keyboards:
     @staticmethod
     def buy_subscription() -> InlineKeyboardMarkup:
         """Buy subscription tariff selection keyboard."""
+        monthly_data = get_tariff_data("monthly")
+        quarterly_data = get_tariff_data("quarterly")
+        yearly_data = get_tariff_data("yearly")
+
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="1 месяц — 299 ₽", callback_data=CallbackData.TARIFF_1_MONTH
+                        text=monthly_data["label"] if monthly_data else "1 месяц — 50 ₽",
+                        callback_data=CallbackData.TARIFF_1_MONTH,
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        text="3 месяца — 799 ₽", callback_data=CallbackData.TARIFF_3_MONTHS
+                        text=quarterly_data["label"] if quarterly_data else "3 месяца — 799 ₽",
+                        callback_data=CallbackData.TARIFF_3_MONTHS,
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        text="12 месяцев — 2499 ₽", callback_data=CallbackData.TARIFF_12_MONTHS
+                        text=yearly_data["label"] if yearly_data else "12 месяцев — 2499 ₽",
+                        callback_data=CallbackData.TARIFF_12_MONTHS,
                     )
                 ],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
+
+    @staticmethod
+    def payment_methods(tariff_type: str) -> InlineKeyboardMarkup:
+        """Payment method selection keyboard.
+
+        Args:
+            tariff_type: Selected tariff type ('monthly', 'quarterly', 'yearly').
+
+        Returns:
+            InlineKeyboardMarkup with payment method buttons.
+        """
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text="💳 СБП QR-код",
+                    callback_data=f"payment_method:{PlategaPaymentMethod.SBP_QR}:{tariff_type}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💳 Банковская карта РФ",
+                    callback_data=f"payment_method:{PlategaPaymentMethod.CARD_ACQUIRING}:{tariff_type}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🌍 Международная карта",
+                    callback_data=f"payment_method:{PlategaPaymentMethod.INTERNATIONAL}:{tariff_type}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="₿ Криптовалюта",
+                    callback_data=f"payment_method:{PlategaPaymentMethod.CRYPTO}:{tariff_type}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🇧🇾 ЕРИП (Беларусь)",
+                    callback_data=f"payment_method:{PlategaPaymentMethod.ERIP}:{tariff_type}",
+                )
+            ],
+            [
+                InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.BUY_SUBSCRIPTION),
+            ],
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    @staticmethod
+    def error_with_support() -> InlineKeyboardMarkup:
+        """Error keyboard with support button.
+
+        Returns:
+            InlineKeyboardMarkup with support and back to menu buttons.
+        """
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🛠️ Поддержка", callback_data=CallbackData.SUPPORT),
+                ],
+                [
+                    InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU),
+                ],
+            ]
+        )
+
+    @staticmethod
+    def payment_confirm(payment_id: int, payment_url: str | None = None) -> InlineKeyboardMarkup:
+        """Payment confirmation keyboard with 'I paid' button.
+
+        Args:
+            payment_id: Internal payment ID.
+            payment_url: Payment URL from provider (optional).
+
+        Returns:
+            InlineKeyboardMarkup with payment confirmation buttons.
+        """
+        buttons = []
+
+        if payment_url:
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text="💳 Перейти к оплате",
+                        url=payment_url,
+                    )
+                ]
+            )
+
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="✅ Я оплатил",
+                    callback_data=f"confirm_payment:{payment_id}",
+                )
+            ]
+        )
+
+        buttons.append(
+            [
+                InlineKeyboardButton(text="◀️ Отмена", callback_data=CallbackData.MAIN_MENU),
+            ]
+        )
+
+        return InlineKeyboardMarkup(inline_keyboard=buttons)

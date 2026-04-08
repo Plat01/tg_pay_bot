@@ -5,7 +5,6 @@ payment API, providing validation and serialization.
 """
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from enum import Enum, IntEnum
 from typing import Any
 from uuid import UUID
@@ -57,7 +56,7 @@ class PlategaPaymentDetails(BaseModel):
         currency: Currency code (e.g., 'RUB', 'USD').
     """
 
-    amount: Decimal = Field(..., ge=0, description="Payment amount")
+    amount: float = Field(..., ge=0, description="Payment amount")
     currency: str = Field(default="RUB", min_length=3, max_length=3, description="Currency code")
 
 
@@ -119,7 +118,7 @@ class PlategaCreateResponse(BaseModel):
     expiresIn: str | None = Field(None, description="Expiration time (HH:MM:SS)")
     merchantId: UUID | None = Field(None, description="Merchant UUID")
     qr: str | None = Field(None, description="QR code data for SBP payments")
-    usdtRate: Decimal | None = Field(None, description="USDT exchange rate")
+    usdtRate: float | None = Field(None, description="USDT exchange rate")
 
     model_config = {"populate_by_name": True, "extra": "ignore"}
 
@@ -193,7 +192,7 @@ class PlategaStatusResponse(BaseModel):
     paymentDetails: PlategaPaymentDetails = Field(..., description="Payment details")
     merchantName: str | None = Field(None, description="Merchant name")
     merchantId: UUID | None = Field(None, description="Merchant UUID")
-    comission: Decimal | None = Field(None, description="Commission amount")
+    comission: float | None = Field(None, description="Commission amount")
     paymentMethod: str | None = Field(None, description="Payment method name")
     expiresIn: str | None = Field(None, description="Expiration time")
     return_url: str | None = Field(None, alias="return", description="Success redirect URL")

@@ -3,7 +3,7 @@
 import random
 import string
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +57,7 @@ class UserService:
                 update_data["is_premium"] = is_premium
 
             if update_data:
-                update_data["updated_at"] = datetime.utcnow()
+                update_data["updated_at"] = datetime.now(timezone.utc)
                 user = await self.repository.update(user, update_data)
             return user
 

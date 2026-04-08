@@ -163,8 +163,7 @@ class PlategaProvider(PaymentProvider):
         # Convert Decimal to str for JSON serialization
         if metadata:
             serialized_metadata = {
-                k: str(v) if isinstance(v, Decimal) else v
-                for k, v in metadata.items()
+                k: str(v) if isinstance(v, Decimal) else v for k, v in metadata.items()
             }
             payload_str = json.dumps(serialized_metadata)
         else:
@@ -191,16 +190,12 @@ class PlategaProvider(PaymentProvider):
 
         try:
             session = await self._get_session()
-            async with session.post(
-                url, json=request_data.model_dump(by_alias=True)
-            ) as response:
+            async with session.post(url, json=request_data.model_dump(by_alias=True)) as response:
                 response_data = await response.json()
 
                 if response.status != 200 and response.status != 201:
                     error_msg = response_data.get("message", "Unknown error")
-                    logger.error(
-                        f"Platega create payment failed: {response.status} - {error_msg}"
-                    )
+                    logger.error(f"Platega create payment failed: {response.status} - {error_msg}")
                     return PlategaCreatePaymentResult(
                         success=False,
                         payment_id="",
