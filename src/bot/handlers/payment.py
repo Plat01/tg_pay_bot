@@ -126,6 +126,8 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
                     "amount": str(amount),
                     "method": payment_method.name,
                     "tariff_type": tariff_type,
+                    "payment_url": result.payment_url,
+                    "has_payment_url": result.payment_url is not None and result.payment_url != "",
                 },
             )
 

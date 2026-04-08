@@ -1,15 +1,10 @@
 """Bot keyboards.
 
-All inline and reply keyboards are centralized here
-for easy editing and consistent UI.
+This module contains all keyboard layouts for the Telegram bot.
 """
 
-from aiogram.types import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-)
+import uuid
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.bot.constants import CallbackData
 from src.bot.subscription_prices import SUBSCRIPTION_PRICES, get_tariff_data
@@ -366,11 +361,13 @@ class Keyboards:
         )
 
     @staticmethod
-    def payment_confirm(payment_id: int, payment_url: str | None = None) -> InlineKeyboardMarkup:
+    def payment_confirm(
+        payment_id: uuid.UUID | str, payment_url: str | None = None
+    ) -> InlineKeyboardMarkup:
         """Payment confirmation keyboard with 'I paid' button.
 
         Args:
-            payment_id: Internal payment ID.
+            payment_id: Internal payment ID (UUID or string).
             payment_url: Payment URL from provider (optional).
 
         Returns:
@@ -378,6 +375,7 @@ class Keyboards:
         """
         buttons = []
 
+        # Add "Go to payment" button if URL exists
         if payment_url:
             buttons.append(
                 [
@@ -388,6 +386,7 @@ class Keyboards:
                 ]
             )
 
+        # Add "I paid" button
         buttons.append(
             [
                 InlineKeyboardButton(
@@ -397,6 +396,7 @@ class Keyboards:
             ]
         )
 
+        # Add cancel button
         buttons.append(
             [
                 InlineKeyboardButton(text="◀️ Отмена", callback_data=CallbackData.MAIN_MENU),
