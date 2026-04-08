@@ -110,3 +110,15 @@ class UserService:
         new_balance = user.balance + amount
         user = await self.repository.update(user, {"balance": new_balance})
         return user
+
+    async def mark_trial_used(self, user: User) -> User:
+        """Mark user as having used trial period.
+
+        Args:
+            user: User instance.
+
+        Returns:
+            Updated User instance with is_new=False.
+        """
+        user = await self.repository.update(user, {"is_new": False})
+        return user

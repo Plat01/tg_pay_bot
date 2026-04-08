@@ -23,7 +23,7 @@ class Texts:
         "📌 <b>Ваша подписка:</b> {subscription_status}\n"
         "📅 <b>До:</b> {subscription_end}\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Нажмите <b>🔗 Подключиться</b> чтобы активировать подписку 👇"
+        "Нажмите <b>💳 Оплатить</b> чтобы активировать подписку 👇"
     )
 
     START_NEW_USER = START_WELCOME
@@ -33,11 +33,8 @@ class Texts:
     START_MAIN_MENU = START_WELCOME
 
     # Info menu - message text
-    INFO_MENU_TEXT = (
-        "ℹ️ <b>Инфо</b>\n\n"
-        "Выберите раздел:"
-    )
-    
+    INFO_MENU_TEXT = "ℹ️ <b>Инфо</b>\n\nВыберите раздел:"
+
     # Info message (old - kept for reference)
     INFO_TEXT = (
         f"ℹ️ <b>О сервисе {settings.bot_name}</b>\n\n"
@@ -111,9 +108,7 @@ class Texts:
 
     # Balance
     BALANCE_INFO = (
-        "💰 <b>Ваш баланс</b>\n\n"
-        "Сумма: {balance} ₽\n"
-        "Реферальный код: <code>{referral_code}</code>"
+        "💰 <b>Ваш баланс</b>\n\nСумма: {balance} ₽\nРеферальный код: <code>{referral_code}</code>"
     )
     BALANCE_DEPOSIT_PROMPT = (
         "💳 <b>Пополнение баланса</b>\n\n"
@@ -128,9 +123,7 @@ class Texts:
         "Выберите сумму или введите вручную:"
     )
     DEPOSIT_AMOUNT_SELECTED = (
-        "💰 <b>Пополнение баланса</b>\n\n"
-        "Сумма: {amount} ₽\n\n"
-        "Выберите способ оплаты:"
+        "💰 <b>Пополнение баланса</b>\n\nСумма: {amount} ₽\n\nВыберите способ оплаты:"
     )
     DEPOSIT_AMOUNT_PROMPT = "Введите сумму пополнения (минимум {min_amount} ₽):"
     DEPOSIT_METHOD_SELECT = "Выберите способ оплаты:"
@@ -146,7 +139,9 @@ class Texts:
     DEPOSIT_FAILED = "❌ Платёж не удался. Попробуйте снова."
     DEPOSIT_CANCELLED = "❌ Пополнение отменено."
     DEPOSIT_INVALID_AMOUNT = "❌ Неверная сумма. Введите число от {min_amount} до {max_amount} ₽."
-    DEPOSIT_MIN_AMOUNT_ERROR = "❌ Минимальная сумма пополнения: {min_amount} ₽\nВведите другую сумму:"
+    DEPOSIT_MIN_AMOUNT_ERROR = (
+        "❌ Минимальная сумма пополнения: {min_amount} ₽\nВведите другую сумму:"
+    )
     DEPOSIT_INVALID_FORMAT = "❌ Неверный формат суммы.\nВведите число, например: 500 или 1000"
     DEPOSIT_HISTORY_EMPTY = "История платежей пуста."
     DEPOSIT_HISTORY_TITLE = "📋 История платежей:\n\n"
@@ -186,9 +181,26 @@ class Texts:
 
     # Subscription messages
     TRIAL_SUBSCRIPTION = (
-        "🧪 <b>Тестовая подписка</b>\n\n"
+        "🧪 <b>Тестовый период</b>\n\n"
         "Вы можете активировать тестовую подписку на 3 дня.\n\n"
         "Для активации нажмите кнопку ниже."
+    )
+    TRIAL_PROPOSAL = (
+        "🧪 <b>Тестовый период</b>\n\n"
+        "Хотите начать 3-дневный тестовый период?\n\n"
+        "Это позволит вам бесплатно попробовать наш VPN сервис."
+    )
+    TRIAL_ACTIVATED = (
+        "✅ <b>Тестовый период активирован!</b>\n\n"
+        "🎉 Ваша подписка активна на 3 дня.\n\n"
+        "🔗 <b>Ваша VPN ссылка:</b>\n"
+        "<code>{vpn_link}</code>\n\n"
+        "👇 Нажмите на ссылку выше, чтобы скопировать её."
+    )
+    TRIAL_ALREADY_USED = (
+        "❌ <b>Тестовый период уже использован</b>\n\n"
+        "Вы уже активировали тестовый период ранее.\n\n"
+        "Для покупки подписки нажмите <b>💳 Оплатить</b>."
     )
     BUY_SUBSCRIPTION = (
         "💎 <b>Купить подписку</b>\n\n"

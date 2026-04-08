@@ -26,7 +26,6 @@ async def cmd_start(message: Message) -> None:
 
     Shows main menu inline keyboard with buttons under message.
     """
-    # Extract referral code from command arguments
     args = message.text.split() if message.text else []
     referral_code = args[1] if len(args) > 1 else None
 
@@ -34,13 +33,11 @@ async def cmd_start(message: Message) -> None:
         user_service = UserService(session)
         subscription_service = SubscriptionService(session)
 
-        # Get user info from message
         user = message.from_user
         if not user:
             await message.answer("Error: Could not get user info")
             return
 
-        # Register or update user
         db_user = await user_service.get_or_create_user(
             telegram_id=str(user.id),
             username=user.username,
@@ -52,23 +49,23 @@ async def cmd_start(message: Message) -> None:
             referral_code=referral_code,
         )
 
-        # Get subscription status using user UUID
         subscription = await subscription_service.get_active_subscription(db_user.id)
         if subscription:
             subscription_status = "✅ Активна"
             subscription_end = subscription.end_date.strftime("%d.%B %Y г.")
+            show_trial_button = False
         else:
             subscription_status = "❌ Не активна"
             subscription_end = "—"
+            show_trial_button = db_user.is_new
 
-        # Send welcome message with main menu inline keyboard
         await message.answer(
             Texts.START_WELCOME.format(
                 subscription_status=subscription_status,
                 subscription_end=subscription_end,
             ),
             parse_mode="HTML",
-            reply_markup=Keyboards.main_menu(),
+            reply_markup=Keyboards.main_menu(show_trial_button=show_trial_button),
         )
 
         logger.info(f"User started bot: {user.id} (@{user.username})")
@@ -90,14 +87,15 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
             await callback.answer()
             return
 
-        # Get subscription status using user UUID
         subscription = await subscription_service.get_active_subscription(db_user.id)
         if subscription:
             subscription_status = "✅ Активна"
             subscription_end = subscription.end_date.strftime("%d.%B %Y г.")
+            show_trial_button = False
         else:
             subscription_status = "❌ Не активна"
             subscription_end = "—"
+            show_trial_button = db_user.is_new
 
         await callback.message.edit_text(
             Texts.START_MAIN_MENU.format(
@@ -105,7 +103,7 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
                 subscription_end=subscription_end,
             ),
             parse_mode="HTML",
-            reply_markup=Keyboards.main_menu(),
+            reply_markup=Keyboards.main_menu(show_trial_button=show_trial_button),
         )
         await callback.answer()
 
@@ -405,13 +403,38 @@ async def handle_help_callback(callback: CallbackQuery) -> None:
 
 
 async def handle_trial_subscription_callback(callback: CallbackQuery) -> None:
-    """Handle 🧪 Тестовая подписка button from main menu."""
-    await callback.message.edit_text(
-        Texts.TRIAL_SUBSCRIPTION,
-        parse_mode="HTML",
-        reply_markup=Keyboards.trial_subscription(),
-    )
-    await callback.answer()
+    """Handle 🧪 Тестовый период button from main menu."""
+    async with async_session_maker() as session:
+        user_service = UserService(session)
+        subscription_service = SubscriptionService(session)
+
+        user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
+
+        if not user:
+            await callback.message.edit_text(
+                Texts.ERROR_NOT_REGISTERED,
+                reply_markup=Keyboards.back_to_menu(),
+            )
+            await callback.answer()
+            return
+
+        subscription = await subscription_service.get_active_subscription(user.id)
+
+        if subscription or not user.is_new:
+            await callback.message.edit_text(
+                Texts.TRIAL_ALREADY_USED,
+                parse_mode="HTML",
+                reply_markup=Keyboards.buy_subscription(),
+            )
+            await callback.answer()
+            return
+
+        await callback.message.edit_text(
+            Texts.TRIAL_PROPOSAL,
+            parse_mode="HTML",
+            reply_markup=Keyboards.trial_subscription(),
+        )
+        await callback.answer()
 
 
 async def handle_buy_subscription_callback(callback: CallbackQuery) -> None:
@@ -422,6 +445,59 @@ async def handle_buy_subscription_callback(callback: CallbackQuery) -> None:
         reply_markup=Keyboards.buy_subscription(),
     )
     await callback.answer()
+
+
+async def handle_trial_activate_callback(callback: CallbackQuery) -> None:
+    """Handle ✅ Начать button - activate trial subscription."""
+    from src.infrastructure.database.repositories import ProductRepository
+
+    async with async_session_maker() as session:
+        user_service = UserService(session)
+        subscription_service = SubscriptionService(session)
+        product_repository = ProductRepository(session)
+
+        user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
+
+        if not user:
+            await callback.message.edit_text(
+                Texts.ERROR_NOT_REGISTERED,
+                reply_markup=Keyboards.back_to_menu(),
+            )
+            await callback.answer()
+            return
+
+        subscription = await subscription_service.get_active_subscription(user.id)
+
+        if subscription or not user.is_new:
+            await callback.message.edit_text(
+                Texts.TRIAL_ALREADY_USED,
+                parse_mode="HTML",
+                reply_markup=Keyboards.buy_subscription(),
+            )
+            await callback.answer()
+            return
+
+        trial_product = await product_repository.get_product_by_subscription_type("trial")
+        if not trial_product:
+            await callback.message.edit_text(
+                "❌ Триальный продукт не найден. Обратитесь в поддержку.",
+                parse_mode="HTML",
+                reply_markup=Keyboards.back_to_menu(),
+            )
+            await callback.answer()
+            return
+
+        await subscription_service.activate_trial(user.id)
+        await user_service.mark_trial_used(user)
+
+        await callback.message.edit_text(
+            Texts.TRIAL_ACTIVATED.format(vpn_link=trial_product.happ_link),
+            parse_mode="HTML",
+            reply_markup=Keyboards.back_to_menu(),
+        )
+        await callback.answer()
+
+        logger.info(f"User {user.telegram_id} activated trial subscription")
 
 
 async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMContext) -> None:
@@ -527,6 +603,10 @@ def register_start_handlers(dp: Dispatcher) -> None:
     dp.callback_query.register(
         handle_trial_subscription_callback,
         F.data == CallbackData.TRIAL_SUBSCRIPTION,
+    )
+    dp.callback_query.register(
+        handle_trial_activate_callback,
+        F.data == CallbackData.TRIAL_ACTIVATE,
     )
     dp.callback_query.register(
         handle_buy_subscription_callback,

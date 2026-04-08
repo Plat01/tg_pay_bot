@@ -4,7 +4,12 @@ All inline and reply keyboards are centralized here
 for easy editing and consistent UI.
 """
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
 
 from src.bot.constants import CallbackData
 from src.config import settings
@@ -15,27 +20,42 @@ class Keyboards:
 
     # Main menu keyboard (Inline - buttons under message)
     @staticmethod
-    def main_menu() -> InlineKeyboardMarkup:
-        """Main menu inline keyboard with new buttons as per requirements."""
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="ℹ️ Инфо", callback_data=CallbackData.INFO),
-                    InlineKeyboardButton(text="💼 Профиль", callback_data=CallbackData.PROFILE),
-                ],
-                [
-                    InlineKeyboardButton(text="💳 Оплатить", callback_data=CallbackData.PAY),
-                    InlineKeyboardButton(text="🧪 Тестовый период", callback_data=CallbackData.TRIAL_SUBSCRIPTION),
-                ],
-                [
-                    InlineKeyboardButton(text="🛠️ Поддержка", callback_data=CallbackData.SUPPORT),
-                ],
-                [
-                    InlineKeyboardButton(text="👥 Пригласить друга", callback_data=CallbackData.CONNECT),
-                ],
-            ]
-        )
-    
+    def main_menu(show_trial_button: bool = True) -> InlineKeyboardMarkup:
+        """Main menu inline keyboard with optional trial button.
+
+        Args:
+            show_trial_button: Whether to show trial subscription button.
+
+        Returns:
+            InlineKeyboardMarkup with main menu buttons.
+        """
+        buttons = [
+            [
+                InlineKeyboardButton(text="ℹ️ Инфо", callback_data=CallbackData.INFO),
+                InlineKeyboardButton(text="💼 Профиль", callback_data=CallbackData.PROFILE),
+            ],
+            [
+                InlineKeyboardButton(text="💳 Оплатить", callback_data=CallbackData.PAY),
+            ],
+            [
+                InlineKeyboardButton(text="🛠️ Поддержка", callback_data=CallbackData.SUPPORT),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👥 Пригласить друга", callback_data=CallbackData.CONNECT
+                ),
+            ],
+        ]
+
+        if show_trial_button:
+            buttons[1].append(
+                InlineKeyboardButton(
+                    text="🧪 Тестовый период", callback_data=CallbackData.TRIAL_SUBSCRIPTION
+                )
+            )
+
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
+
     # Info menu keyboard with legal links
     @staticmethod
     def info_menu() -> InlineKeyboardMarkup:
@@ -106,8 +126,16 @@ class Keyboards:
         """Referral menu keyboard."""
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="📋 Статистика", callback_data=CallbackData.REFERRAL_STATS)],
-                [InlineKeyboardButton(text="🔗 Получить ссылку", callback_data=CallbackData.REFERRAL_LINK)],
+                [
+                    InlineKeyboardButton(
+                        text="📋 Статистика", callback_data=CallbackData.REFERRAL_STATS
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🔗 Получить ссылку", callback_data=CallbackData.REFERRAL_LINK
+                    )
+                ],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
@@ -162,7 +190,11 @@ class Keyboards:
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="➕ Пополнить", callback_data=CallbackData.DEPOSIT)],
-                [InlineKeyboardButton(text="📋 История", callback_data=CallbackData.DEPOSIT_HISTORY)],
+                [
+                    InlineKeyboardButton(
+                        text="📋 История", callback_data=CallbackData.DEPOSIT_HISTORY
+                    )
+                ],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
@@ -175,15 +207,25 @@ class Keyboards:
             inline_keyboard=[
                 [
                     InlineKeyboardButton(text="50 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_50),
-                    InlineKeyboardButton(text="100 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_100),
+                    InlineKeyboardButton(
+                        text="100 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_100
+                    ),
                 ],
                 [
-                    InlineKeyboardButton(text="250 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_250),
-                    InlineKeyboardButton(text="500 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_500),
+                    InlineKeyboardButton(
+                        text="250 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_250
+                    ),
+                    InlineKeyboardButton(
+                        text="500 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_500
+                    ),
                 ],
                 [
-                    InlineKeyboardButton(text="1000 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_1000),
-                    InlineKeyboardButton(text="2500 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_2500),
+                    InlineKeyboardButton(
+                        text="1000 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_1000
+                    ),
+                    InlineKeyboardButton(
+                        text="2500 ₽", callback_data=CallbackData.DEPOSIT_AMOUNT_2500
+                    ),
                 ],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
@@ -196,11 +238,15 @@ class Keyboards:
         buttons = []
         if page > 0:
             buttons.append(
-                InlineKeyboardButton(text="⬅️", callback_data=f"{CallbackData.DEPOSIT_HISTORY}:{page - 1}")
+                InlineKeyboardButton(
+                    text="⬅️", callback_data=f"{CallbackData.DEPOSIT_HISTORY}:{page - 1}"
+                )
             )
         if page < total_pages - 1:
             buttons.append(
-                InlineKeyboardButton(text="➡️", callback_data=f"{CallbackData.DEPOSIT_HISTORY}:{page + 1}")
+                InlineKeyboardButton(
+                    text="➡️", callback_data=f"{CallbackData.DEPOSIT_HISTORY}:{page + 1}"
+                )
             )
         return InlineKeyboardMarkup(
             inline_keyboard=[
@@ -212,10 +258,10 @@ class Keyboards:
     # Trial subscription keyboard
     @staticmethod
     def trial_subscription() -> InlineKeyboardMarkup:
-        """Trial subscription keyboard."""
+        """Trial subscription keyboard with 'Start' button."""
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="✅ Активировать", callback_data=CallbackData.TRIAL_ACTIVATE)],
+                [InlineKeyboardButton(text="✅ Начать", callback_data=CallbackData.TRIAL_ACTIVATE)],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
@@ -226,9 +272,21 @@ class Keyboards:
         """Buy subscription tariff selection keyboard."""
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="1 месяц — 299 ₽", callback_data=CallbackData.TARIFF_1_MONTH)],
-                [InlineKeyboardButton(text="3 месяца — 799 ₽", callback_data=CallbackData.TARIFF_3_MONTHS)],
-                [InlineKeyboardButton(text="12 месяцев — 2499 ₽", callback_data=CallbackData.TARIFF_12_MONTHS)],
+                [
+                    InlineKeyboardButton(
+                        text="1 месяц — 299 ₽", callback_data=CallbackData.TARIFF_1_MONTH
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="3 месяца — 799 ₽", callback_data=CallbackData.TARIFF_3_MONTHS
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="12 месяцев — 2499 ₽", callback_data=CallbackData.TARIFF_12_MONTHS
+                    )
+                ],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
         )
