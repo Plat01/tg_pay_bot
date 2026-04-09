@@ -24,8 +24,11 @@ class ProductRepository:
         return result.scalar_one_or_none()
 
     async def get_product_by_subscription_type(self, subscription_type: str) -> Product | None:
-        """Get product by subscription type."""
-        stmt = select(Product).where(Product.subscription_type == subscription_type)
+        """Get product by subscription type (only active products)."""
+        stmt = select(Product).where(
+            Product.subscription_type == subscription_type,
+            Product.is_active.is_(True),
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
