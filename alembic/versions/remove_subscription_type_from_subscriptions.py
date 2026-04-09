@@ -19,7 +19,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Drop device_limit - it's now taken from product via relationship
+    # Drop subscription_type and device_limit - they're now taken from product via relationship
+    op.drop_column("subscriptions", "subscription_type")
     op.drop_column("subscriptions", "device_limit")
 
 
