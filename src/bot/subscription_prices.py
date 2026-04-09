@@ -12,7 +12,7 @@ from typing import Dict, Any
 
 SUBSCRIPTION_PRICES: Dict[str, Dict[str, Any]] = {
     "monthly": {
-        "price": 50,  # Test price - change to 299 after testing
+        "price": 50,  # TODO: Test price - change to 299 after testing
         "days": 30,
         "label": "1 месяц — 50 ₽",
         "tariff_type": "monthly",
