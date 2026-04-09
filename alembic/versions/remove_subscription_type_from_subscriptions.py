@@ -19,9 +19,32 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Drop subscription_type and device_limit - they're now taken from product via relationship
-    op.drop_column("subscriptions", "subscription_type")
-    op.drop_column("subscriptions", "device_limit")
+    # Check if columns exist before dropping (they might have been manually removed)
+    conn = op.get_bind()
+
+    # Check subscription_type
+    result = conn.execute(
+        sa.text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'subscriptions' 
+            AND column_name = 'subscription_type'
+        """)
+    )
+    if result.fetchone():
+        op.drop_column("subscriptions", "subscription_type")
+
+    # Check device_limit
+    result = conn.execute(
+        sa.text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'subscriptions' 
+            AND column_name = 'device_limit'
+        """)
+    )
+    if result.fetchone():
+        op.drop_column("subscriptions", "device_limit")
 
 
 def downgrade() -> None:
