@@ -52,7 +52,7 @@ async def cmd_start(message: Message) -> None:
         subscription = await subscription_service.get_active_subscription(db_user.id)
         if subscription:
             subscription_status = "✅ Активна"
-            subscription_end = subscription.end_date.strftime("%d.%B %Y г.")
+            subscription_end = subscription.end_date.strftime("%d.%m.%Y")
             show_trial_button = False
         else:
             subscription_status = "❌ Не активна"
@@ -90,7 +90,7 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
         subscription = await subscription_service.get_active_subscription(db_user.id)
         if subscription:
             subscription_status = "✅ Активна"
-            subscription_end = subscription.end_date.strftime("%d.%B %Y г.")
+            subscription_end = subscription.end_date.strftime("%d.%m.%Y")
             show_trial_button = False
         else:
             subscription_status = "❌ Не активна"
