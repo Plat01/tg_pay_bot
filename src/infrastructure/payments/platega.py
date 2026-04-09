@@ -92,8 +92,8 @@ class PlategaProvider(PaymentProvider):
         """Initialize Platega provider.
 
         Args:
-            api_key: Platega API key / secret (defaults to settings.platega_secret).
-            merchant_id: Platega merchant ID (defaults to settings.platega_merchant_id).
+            api_key: Platega API key / secret (X-Secret header).
+            merchant_id: Platega merchant ID (X-MerchantId header).
             webhook_secret: Secret for webhook signature verification.
             api_url: Platega API URL (defaults to settings).
             default_payment_method: Default payment method for transactions.
@@ -105,18 +105,29 @@ class PlategaProvider(PaymentProvider):
         self._default_payment_method = default_payment_method
         self._session: aiohttp.ClientSession | None = None
 
+        # Log configuration for debugging
+        logger.info(
+            "Platega provider initialized",
+            extra={
+                "merchant_id": self._merchant_id[:8] + "..." if self._merchant_id else "EMPTY",
+                "api_key": self._api_key[:8] + "..." if self._api_key else "EMPTY",
+                "api_url": self._api_url,
+            },
+        )
+
     @property
     def name(self) -> PaymentProviderName:
         """Get provider name."""
         return PaymentProviderName.PLATEGA
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create HTTP session."""
+        """Get or create HTTP session with Platega authentication headers."""
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=DEFAULT_RETRY_CONFIG.timeout or 10.0)
             self._session = aiohttp.ClientSession(
                 headers={
-                    "Authorization": f"Bearer {self._api_key}",
+                    "X-MerchantId": self._merchant_id,
+                    "X-Secret": self._api_key,
                     "Content-Type": "application/json",
                     "Accept": "application/json",
                 },
