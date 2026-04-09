@@ -361,6 +361,24 @@ class Keyboards:
         )
 
     @staticmethod
+    def error_with_support_link() -> InlineKeyboardMarkup:
+        """Error keyboard with direct support link button.
+
+        Returns:
+            InlineKeyboardMarkup with support link and back to menu buttons.
+        """
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="💬 Написать в поддержку", url=settings.support_link),
+                ],
+                [
+                    InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU),
+                ],
+            ]
+        )
+
+    @staticmethod
     def payment_confirm(
         payment_id: uuid.UUID | str, payment_url: str | None = None
     ) -> InlineKeyboardMarkup:

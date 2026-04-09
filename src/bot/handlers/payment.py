@@ -166,7 +166,7 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
             "❌ <b>Ошибка создания платежа</b>\n\n"
             "Не удалось создать платеж. Обратитесь в поддержку.",
             parse_mode="HTML",
-            reply_markup=Keyboards.error_with_support(),
+            reply_markup=Keyboards.error_with_support_link(),
         )
 
 
@@ -316,7 +316,7 @@ async def handle_confirm_payment(callback: CallbackQuery) -> None:
             "❌ <b>Ошибка проверки платежа</b>\n\n"
             "Не удалось проверить статус платежа. Обратитесь в поддержку.",
             parse_mode="HTML",
-            reply_markup=Keyboards.error_with_support(),
+            reply_markup=Keyboards.error_with_support_link(),
         )
 
 
