@@ -20,6 +20,7 @@ class SubscriptionLinkStates(StatesGroup):
 
     waiting_for_trial_link = State()
     waiting_for_monthly_link = State()
+    waiting_for_quarterly_link = State()
     waiting_for_yearly_link = State()
 
 
@@ -27,7 +28,7 @@ async def cmd_send_subscription_links(message: Message, state: FSMContext) -> No
     """Admin command to collect subscription links.
 
     Only accessible to admin users defined in settings.admin_ids.
-    Prompts admin to send trial, monthly, and yearly links separately.
+    Prompts admin to send trial, monthly, quarterly, and yearly links separately.
     """
 
     if not message.from_user:
@@ -142,6 +143,56 @@ async def process_monthly_link(message: Message, state: FSMContext) -> None:
         await message.answer("❌ Произошла ошибка при сохранении месячной ссылки.")
         return
 
+    # Move to next state to get quarterly link
+    await state.set_state(SubscriptionLinkStates.waiting_for_quarterly_link)
+    await message.answer(
+        "🔗 <b>Введите ссылку для квартальной (quarterly) подписки:</b>\n\n"
+        "Для прекращения введите команду /cancel"
+    )
+
+
+async def process_quarterly_link(message: Message, state: FSMContext) -> None:
+    """Process the quarterly link sent by admin and save it immediately."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте ссылку текстом.")
+        return
+
+    quarterly_link = message.text.strip()
+
+    # Save the quarterly link to database immediately
+    try:
+        async with async_session_maker() as session:
+            product_repository = ProductRepository(session)
+
+            # Deactivate existing quarterly product first (to update it)
+            existing_products = await product_repository.get_all_products()
+            for product in existing_products:
+                if product.subscription_type == "quarterly":
+                    await product_repository.update_product(product.id, is_active=False)
+
+            # Create new quarterly product
+            from src.models.product import Product
+
+            quarterly_product = Product(
+                subscription_type=SubscriptionType.QUARTERLY,
+                price=799.0,  # Default price
+                duration_days=90,  # Quarterly (3 months)
+                device_limit=1,
+                is_active=True,
+                happ_link=quarterly_link,
+            )
+            await product_repository.create_product(quarterly_product)
+
+            await message.answer(
+                f"✅ Квартальная ссылка успешно сохранена в базу данных!\n\n"
+                f"🏷 <b>Квартальная (quarterly) подписка:</b>\n🔗 <code>{quarterly_link}</code>"
+            )
+
+    except Exception as e:
+        logger.error(f"Error saving quarterly subscription link: {e}")
+        await message.answer("❌ Произошла ошибка при сохранении квартальной ссылки.")
+        return
+
     # Move to next state to get yearly link
     await state.set_state(SubscriptionLinkStates.waiting_for_yearly_link)
     await message.answer(
@@ -187,7 +238,7 @@ async def process_yearly_link(message: Message, state: FSMContext) -> None:
                 f"🏷 <b>Годовая (yearly) подписка:</b>\n🔗 <code>{yearly_link}</code>"
             )
 
-            await message.answer("🎉 Все три ссылки успешно сохранены в базу данных!")
+            await message.answer("🎉 Все четыре ссылки успешно сохранены в базу данных!")
 
     except Exception as e:
         logger.error(f"Error saving yearly subscription link: {e}")
@@ -219,6 +270,7 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
     if current_state in [
         SubscriptionLinkStates.waiting_for_trial_link,
         SubscriptionLinkStates.waiting_for_monthly_link,
+        SubscriptionLinkStates.waiting_for_quarterly_link,
         SubscriptionLinkStates.waiting_for_yearly_link,
     ]:
         await state.clear()
@@ -238,6 +290,7 @@ def register_admin_handlers(dp: Dispatcher) -> None:
     # Handlers for each state
     dp.message.register(process_trial_link, SubscriptionLinkStates.waiting_for_trial_link)
     dp.message.register(process_monthly_link, SubscriptionLinkStates.waiting_for_monthly_link)
+    dp.message.register(process_quarterly_link, SubscriptionLinkStates.waiting_for_quarterly_link)
     dp.message.register(process_yearly_link, SubscriptionLinkStates.waiting_for_yearly_link)
 
     logger.info("Admin handlers registered")
