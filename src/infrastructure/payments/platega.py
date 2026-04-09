@@ -31,6 +31,7 @@ from src.infrastructure.payments.exceptions import (
     PaymentCreationError,
     PaymentProviderUnavailable,
     PaymentSignatureError,
+    PaymentStatusError,
     PaymentValidationError,
 )
 from src.infrastructure.payments.schemas import (
