@@ -52,7 +52,7 @@ class Settings(BaseSettings):
 
     # Payment Auto-Check Settings
     payment_check_interval_minutes: int = 5  # Check every 5 minutes
-    payment_expiry_timeout_hours: int = 1  # Mark as expired after 1 hour
+    payment_expiry_timeout_hours: float = 0.5  # Mark as expired after 30 minutes (testing)
 
     @field_validator("debug", mode="before")
     @classmethod
