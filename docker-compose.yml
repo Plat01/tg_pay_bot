@@ -20,7 +20,7 @@ services:
     image: postgres:16-alpine
     container_name: tg_pay_bot_db
     restart: unless-stopped
-    network_mode: host
+    # network_mode: host
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}

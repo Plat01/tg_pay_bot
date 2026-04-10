@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -79,7 +80,15 @@ class UserService:
             if referrer:
                 user_data["referred_by_id"] = referrer.id
 
-        return await self.repository.create(user_data)
+        try:
+            return await self.repository.create(user_data)
+        except IntegrityError:
+            # Race condition: another request already created this user
+            await self.session.rollback()
+            user = await self.repository.get_by_telegram_id(telegram_id_str)
+            if user:
+                return user
+            raise
 
     async def get_user_by_telegram_id(self, telegram_id: int | str) -> User | None:
         """Get user by Telegram ID."""
