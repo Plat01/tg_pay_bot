@@ -53,19 +53,50 @@ class PaymentRepository(BaseRepository[Payment]):
         await self.session.refresh(payment)
         return payment
 
-    async def get_stale_pending_payments(
+    async def get_active_pending_payments(
+        self,
+        newer_than: datetime,
+        limit: int = 100,
+    ) -> list[Payment]:
+        """Get PENDING payments newer than specified datetime (active payments).
+
+        Payments created AFTER this datetime are considered active
+        and should be checked with provider.
+
+        Args:
+            newer_than: Datetime threshold (payments created after this)
+            limit: Maximum number of payments to return
+
+        Returns:
+            List of active PENDING Payment instances.
+        """
+        statement = (
+            select(Payment)
+            .where(Payment.status == PaymentStatus.PENDING)
+            .where(Payment.created_at > newer_than)
+            .where(Payment.external_id.isnot(None))
+            .order_by(Payment.created_at.asc())
+            .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
+
+    async def get_expired_pending_payments(
         self,
         older_than: datetime,
         limit: int = 100,
     ) -> list[Payment]:
-        """Get PENDING payments older than specified datetime.
+        """Get PENDING payments older than specified datetime (expired payments).
+
+        Payments created BEFORE this datetime are considered expired
+        and should be marked as EXPIRED without checking provider.
 
         Args:
             older_than: Datetime threshold (payments created before this)
             limit: Maximum number of payments to return
 
         Returns:
-            List of PENDING Payment instances.
+            List of expired PENDING Payment instances.
         """
         statement = (
             select(Payment)

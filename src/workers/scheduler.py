@@ -20,17 +20,21 @@ scheduler = AsyncIOScheduler()
 
 
 async def check_pending_payments_job() -> None:
-    """Job to check stale PENDING payments.
+    """Job to check and process PENDING payments.
 
     Called by APScheduler every PAYMENT_CHECK_INTERVAL_MINUTES.
+
+    Logic:
+    - Payments older than expiry_timeout_hours → mark as EXPIRED
+    - Payments newer than expiry_timeout_hours → check status with provider
     """
     expiry_timeout_hours = getattr(settings, "payment_expiry_timeout_hours", 1)
-    older_than = datetime.now(timezone.utc) - timedelta(hours=expiry_timeout_hours)
+    threshold = datetime.now(timezone.utc) - timedelta(hours=expiry_timeout_hours)
 
     logger.info(
-        f"Checking stale PENDING payments",
+        f"Checking PENDING payments",
         extra={
-            "older_than": older_than.isoformat(),
+            "threshold": threshold.isoformat(),
             "expiry_timeout_hours": expiry_timeout_hours,
         },
     )
@@ -38,23 +42,49 @@ async def check_pending_payments_job() -> None:
     async with async_session_maker() as session:
         payment_service = PaymentService(session)
 
-        stale_payments = await payment_service.repository.get_stale_pending_payments(
-            older_than=older_than,
+        # Step 1: Mark expired payments (older than timeout)
+        expired_payments = await payment_service.repository.get_expired_pending_payments(
+            older_than=threshold,
             limit=100,
         )
 
-        if not stale_payments:
-            logger.debug("No stale PENDING payments found")
+        if expired_payments:
+            logger.info(
+                f"Found {len(expired_payments)} expired PENDING payments (older than {expiry_timeout_hours}h)",
+                extra={"expired_count": len(expired_payments)},
+            )
+
+            for payment in expired_payments:
+                try:
+                    await mark_payment_as_expired(payment_service, payment)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to mark payment as expired: {e}",
+                        extra={
+                            "payment_id": str(payment.id),
+                            "user_id": str(payment.user_id),
+                        },
+                        exc_info=True,
+                    )
+
+        # Step 2: Check active payments (newer than timeout)
+        active_payments = await payment_service.repository.get_active_pending_payments(
+            newer_than=threshold,
+            limit=100,
+        )
+
+        if not active_payments:
+            logger.debug("No active PENDING payments found")
             return
 
         logger.info(
-            f"Found {len(stale_payments)} stale PENDING payments",
-            extra={"count": len(stale_payments)},
+            f"Found {len(active_payments)} active PENDING payments (newer than {expiry_timeout_hours}h)",
+            extra={"active_count": len(active_payments)},
         )
 
-        for payment in stale_payments:
+        for payment in active_payments:
             try:
-                await process_stale_payment(payment_service, payment)
+                await process_active_payment(payment_service, payment)
             except Exception as e:
                 logger.error(
                     f"Failed to process payment {payment.id}: {e}",
@@ -66,18 +96,50 @@ async def check_pending_payments_job() -> None:
                 )
 
 
-async def process_stale_payment(
+async def mark_payment_as_expired(
     payment_service: PaymentService,
     payment: Payment,
 ) -> None:
-    """Process one stale PENDING payment.
+    """Mark payment as EXPIRED without checking provider.
+
+    Args:
+        payment_service: PaymentService instance
+        payment: Payment to mark as expired
+    """
+    logger.info(
+        f"Marking payment as expired",
+        extra={
+            "payment_id": str(payment.id),
+            "created_at": payment.created_at.isoformat(),
+        },
+    )
+
+    payment = await payment_service.repository.update_status(
+        payment,
+        PaymentStatus.EXPIRED,
+    )
+
+    logger.info(
+        f"Payment marked as expired",
+        extra={
+            "payment_id": str(payment.id),
+            "status": payment.status.value,
+        },
+    )
+
+
+async def process_active_payment(
+    payment_service: PaymentService,
+    payment: Payment,
+) -> None:
+    """Process one active PENDING payment (check status with provider).
 
     Args:
         payment_service: PaymentService instance
         payment: Payment to process
     """
     logger.info(
-        f"Processing stale payment",
+        f"Processing active payment",
         extra={
             "payment_id": str(payment.id),
             "external_id": payment.external_id,
@@ -90,7 +152,7 @@ async def process_stale_payment(
 
     if payment.status == PaymentStatus.COMPLETED:
         logger.info(
-            f"Stale payment completed successfully",
+            f"Active payment completed successfully",
             extra={
                 "payment_id": str(payment.id),
                 "status": payment.status.value,
@@ -105,7 +167,7 @@ async def process_stale_payment(
                 )
 
                 logger.info(
-                    f"Product delivered for stale payment",
+                    f"Product delivered for active payment",
                     extra={
                         "payment_id": str(payment.id),
                         "delivery_type": delivery_result.get("type"),
@@ -114,7 +176,7 @@ async def process_stale_payment(
 
                 await notify_user_payment_completed(
                     telegram_id=user.telegram_id,
-                    amount=payment.amount,
+                    amount=str(payment.amount),
                     delivery_result=delivery_result,
                 )
         except Exception as e:
@@ -126,7 +188,7 @@ async def process_stale_payment(
 
     elif payment.status == PaymentStatus.FAILED:
         logger.warning(
-            f"Stale payment failed",
+            f"Active payment failed",
             extra={
                 "payment_id": str(payment.id),
                 "status": payment.status.value,
@@ -135,7 +197,7 @@ async def process_stale_payment(
 
     elif payment.status == PaymentStatus.CANCELLED:
         logger.warning(
-            f"Stale payment cancelled",
+            f"Active payment cancelled",
             extra={
                 "payment_id": str(payment.id),
                 "status": payment.status.value,
@@ -143,24 +205,12 @@ async def process_stale_payment(
         )
 
     elif payment.status == PaymentStatus.PENDING:
-        logger.warning(
-            f"Stale payment still pending, marking as expired",
+        # Still pending after check - will be checked again next run
+        logger.debug(
+            f"Active payment still pending",
             extra={
                 "payment_id": str(payment.id),
                 "created_at": payment.created_at.isoformat(),
-            },
-        )
-
-        payment = await payment_service.repository.update_status(
-            payment,
-            PaymentStatus.EXPIRED,
-        )
-
-        logger.info(
-            f"Payment marked as expired",
-            extra={
-                "payment_id": str(payment.id),
-                "status": payment.status.value,
             },
         )
 
