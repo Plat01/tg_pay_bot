@@ -324,6 +324,7 @@ class PlategaProvider(PaymentProvider):
                     success=True,
                     payment_id=payment_id,
                     status=status,
+                    external_status=status_response.status.value,
                     amount=amount,
                     currency=currency,
                     raw_response=response_data,

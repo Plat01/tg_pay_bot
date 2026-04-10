@@ -79,10 +79,16 @@ class PaymentStatusResult(BaseModel):
 
     This model standardizes status check responses from different providers.
 
+    IMPORTANT: Providers must return mapped PaymentStatus in 'status' field.
+    PaymentService should use 'status' directly, NOT call map_status() again.
+
+    'external_status' contains the raw provider status string for logging.
+
     Attributes:
         success: Whether the status check was successful.
         payment_id: Payment ID that was checked.
-        status: Current status from the provider (mapped to PaymentStatus).
+        status: Mapped internal PaymentStatus (READY TO USE).
+        external_status: Raw status string from provider (for logging).
         amount: Payment amount.
         currency: Currency code.
         error_message: Error message if check failed.
@@ -91,7 +97,10 @@ class PaymentStatusResult(BaseModel):
 
     success: bool = Field(default=True, description="Whether status check was successful")
     payment_id: str = Field(default="", description="Payment ID checked")
-    status: PaymentStatus = Field(default=PaymentStatus.PENDING, description="Current payment status")
+    status: PaymentStatus = Field(
+        default=PaymentStatus.PENDING, description="Mapped internal payment status"
+    )
+    external_status: str = Field(default="", description="Raw provider status for logging")
     amount: Decimal = Field(default=Decimal("0"), description="Payment amount")
     currency: str = Field(default="RUB", description="Currency code")
     error_message: str | None = Field(None, description="Error message if failed")
@@ -213,14 +222,17 @@ class PaymentProvider(ABC):
 
     @abstractmethod
     def map_status(self, external_status: str) -> PaymentStatus:
-        """Map provider status to internal PaymentStatus.
+        """Map provider status string to internal PaymentStatus.
+
+        USAGE: Only for webhook parsing and initial status mapping.
+        NOT for PaymentStatusResult.status (already mapped by provider).
 
         Each provider has its own status naming. This method
         translates provider-specific statuses to our internal
         PaymentStatus enum.
 
         Args:
-            external_status: Status string from provider.
+            external_status: Raw status string from provider (e.g., "CONFIRMED").
 
         Returns:
             Corresponding internal PaymentStatus value.

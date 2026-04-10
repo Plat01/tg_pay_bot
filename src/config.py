@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     platega_webhook_secret: str = ""  # Secret for webhook signature verification
     default_payment_provider: str = "platega"
 
+    # Payment Auto-Check Settings
+    payment_check_interval_minutes: int = 5  # Check every 5 minutes
+    payment_expiry_timeout_hours: int = 1  # Mark as expired after 1 hour
+
     @field_validator("debug", mode="before")
     @classmethod
     def validate_debug(cls, v: str | bool) -> bool:

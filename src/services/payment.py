@@ -6,14 +6,18 @@ external payment providers and managing the payment lifecycle.
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
-from src.infrastructure.database.repositories import PaymentRepository, UserRepository
+from src.infrastructure.database.repositories import (
+    PaymentRepository,
+    UserRepository,
+    ProductRepository,
+)
 from src.infrastructure.payments import (
     PaymentProvider,
     PaymentProviderFactory,
@@ -22,6 +26,8 @@ from src.infrastructure.payments import (
 )
 from src.models.payment import Payment, PaymentStatus
 from src.services.referral import ReferralService
+from src.services.subscription import SubscriptionService
+from src.bot.subscription_prices import get_tariff_by_price
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +65,9 @@ class PaymentService:
         """
         self.repository = PaymentRepository(session)
         self.user_repository = UserRepository(session)
+        self.product_repository = ProductRepository(session)
         self.referral_service = ReferralService(session)
+        self.subscription_service = SubscriptionService(session)
         self.provider_name = provider_name or settings.default_payment_provider
         self._provider: PaymentProvider | None = None
         self._closed: bool = False
@@ -313,13 +321,13 @@ class PaymentService:
 
         # Get status from provider
         status_result = await self.provider.get_payment_status(payment.external_id)
-        new_status = self.provider.map_status(status_result.status)
+        new_status = status_result.status
 
         logger.info(
             f"Payment status from provider",
             extra={
                 "payment_id": payment.id,
-                "external_status": status_result.status,
+                "external_status": status_result.external_status,
                 "mapped_status": new_status.value,
             },
         )
@@ -422,6 +430,118 @@ class PaymentService:
             extra={"payment_id": payment.id},
         )
         return await self.repository.update_status(payment, PaymentStatus.CANCELLED)
+
+    async def complete_payment_and_deliver(
+        self,
+        payment: Payment,
+        telegram_id: str,
+    ) -> dict[str, Any]:
+        """Complete payment and deliver appropriate product.
+
+        Handles both subscription and balance deposit payments.
+
+        Args:
+            payment: Payment to complete
+            telegram_id: User Telegram ID for notifications
+
+        Returns:
+            Dict with delivery details (subscription_id, vpn_link, etc.)
+
+        Raises:
+            ValueError: If payment type unknown or product not found
+        """
+        logger.info(
+            f"Completing payment and delivering product",
+            extra={
+                "payment_id": str(payment.id),
+                "amount": str(payment.amount),
+                "description": payment.description,
+            },
+        )
+
+        if payment.description and payment.description.startswith("Подписка:"):
+            result = await self._deliver_subscription(payment)
+            logger.info(
+                f"Subscription delivered",
+                extra={
+                    "payment_id": str(payment.id),
+                    "subscription_id": str(result["subscription_id"]),
+                },
+            )
+            return result
+        elif payment.description and payment.description.startswith("Пополнение"):
+            result = await self._deliver_balance_topup(payment)
+            logger.info(
+                f"Balance topup delivered",
+                extra={
+                    "payment_id": str(payment.id),
+                    "new_balance": str(result["new_balance"]),
+                },
+            )
+            return result
+        else:
+            raise ValueError(f"Unknown payment type: {payment.description}")
+
+    async def _deliver_subscription(self, payment: Payment) -> dict[str, Any]:
+        """Create subscription for successful payment.
+
+        Args:
+            payment: Payment instance
+
+        Returns:
+            Dict with subscription details
+
+        Raises:
+            ValueError: If tariff or product not found
+        """
+        tariff_type = get_tariff_by_price(int(payment.amount))
+
+        if not tariff_type:
+            raise ValueError(f"Cannot determine tariff for amount {payment.amount}")
+
+        product = await self.product_repository.get_product_by_subscription_type(tariff_type)
+
+        if not product:
+            raise ValueError(f"Product not found for tariff {tariff_type}")
+
+        subscription = await self.subscription_service.create_subscription(
+            user_id=payment.user_id,
+            product_id=product.id,
+            duration_days=product.duration_days,
+        )
+
+        return {
+            "type": "subscription",
+            "subscription_id": subscription.id,
+            "vpn_link": product.happ_link,
+            "duration_days": product.duration_days,
+        }
+
+    async def _deliver_balance_topup(self, payment: Payment) -> dict[str, Any]:
+        """Update user balance for successful deposit.
+
+        Args:
+            payment: Payment instance
+
+        Returns:
+            Dict with balance details
+
+        Raises:
+            ValueError: If user not found
+        """
+        user = await self.user_repository.get_by_id(payment.user_id)
+
+        if not user:
+            raise ValueError(f"User not found: {payment.user_id}")
+
+        new_balance = user.balance + payment.amount
+        user = await self.user_repository.update(user, {"balance": new_balance})
+
+        return {
+            "type": "balance",
+            "amount": payment.amount,
+            "new_balance": user.balance,
+        }
 
     async def close_provider(self) -> None:
         """Close payment provider resources.

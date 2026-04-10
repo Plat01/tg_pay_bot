@@ -19,14 +19,13 @@ from aiogram.types import CallbackQuery
 from src.bot.constants import CallbackData
 from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
-from src.bot.subscription_prices import get_tariff_data, get_tariff_by_price
+from src.bot.subscription_prices import get_tariff_data
 from src.config import settings
 from src.infrastructure.database import async_session_maker
-from src.infrastructure.database.repositories import UserRepository, ProductRepository
+from src.infrastructure.database.repositories import UserRepository
 from src.infrastructure.payments import PlategaPaymentMethod
 from src.models.payment import PaymentStatus
 from src.services.payment import PaymentService
-from src.services.subscription import SubscriptionService
 
 logger = logging.getLogger(__name__)
 
@@ -228,51 +227,51 @@ async def handle_confirm_payment(callback: CallbackQuery) -> None:
             )
 
             if payment.status == PaymentStatus.COMPLETED:
-                tariff_type = get_tariff_by_price(int(payment.amount))
+                try:
+                    delivery_result = await payment_service.complete_payment_and_deliver(
+                        payment, str(callback.from_user.id)
+                    )
 
-                if not tariff_type:
+                    logger.info(
+                        f"Subscription activated from payment",
+                        extra={
+                            "user_id": user.id,
+                            "payment_id": payment_id,
+                            "delivery_type": delivery_result.get("type"),
+                        },
+                    )
+
+                    if delivery_result["type"] == "subscription":
+                        await callback.message.edit_text(
+                            Texts.PAYMENT_SUCCESS_RESULT.format(
+                                duration=delivery_result["duration_days"],
+                                vpn_link=delivery_result["vpn_link"],
+                            ),
+                            parse_mode="HTML",
+                            reply_markup=Keyboards.back_to_menu(),
+                        )
+                    elif delivery_result["type"] == "balance":
+                        await callback.message.edit_text(
+                            Texts.BALANCE_TOPUP_SUCCESS.format(
+                                amount=delivery_result["amount"],
+                                balance=delivery_result["new_balance"],
+                            ),
+                            parse_mode="HTML",
+                            reply_markup=Keyboards.back_to_menu(),
+                        )
+                except ValueError as e:
+                    logger.error(
+                        f"Failed to deliver product: {e}",
+                        extra={
+                            "user_id": user.id,
+                            "payment_id": payment_id,
+                        },
+                    )
                     await callback.message.edit_text(
-                        f"❌ Не удалось определить тариф для суммы {payment.amount}",
+                        f"❌ <b>Ошибка выдачи товара</b>\n\n{str(e)}",
                         parse_mode="HTML",
                         reply_markup=Keyboards.back_to_menu(),
                     )
-                    return
-
-                product = await product_repository.get_product_by_subscription_type(tariff_type)
-
-                if not product:
-                    await callback.message.edit_text(
-                        f"❌ Продукт для тарифа {tariff_type} не найден",
-                        parse_mode="HTML",
-                        reply_markup=Keyboards.back_to_menu(),
-                    )
-                    return
-
-                subscription = await subscription_service.create_subscription(
-                    user_id=user.id,
-                    product_id=product.id,
-                    duration_days=product.duration_days,
-                )
-
-                logger.info(
-                    f"Subscription activated from payment",
-                    extra={
-                        "user_id": user.id,
-                        "subscription_id": subscription.id,
-                        "payment_id": payment_id,
-                        "tariff_type": tariff_type,
-                        "duration_days": product.duration_days,
-                    },
-                )
-
-                await callback.message.edit_text(
-                    Texts.PAYMENT_SUCCESS_RESULT.format(
-                        duration=product.duration_days,
-                        vpn_link=product.happ_link,
-                    ),
-                    parse_mode="HTML",
-                    reply_markup=Keyboards.back_to_menu(),
-                )
 
             elif payment.status == PaymentStatus.PENDING:
                 await callback.message.edit_text(

@@ -52,3 +52,28 @@ class PaymentRepository(BaseRepository[Payment]):
         await self.session.commit()
         await self.session.refresh(payment)
         return payment
+
+    async def get_stale_pending_payments(
+        self,
+        older_than: datetime,
+        limit: int = 100,
+    ) -> list[Payment]:
+        """Get PENDING payments older than specified datetime.
+
+        Args:
+            older_than: Datetime threshold (payments created before this)
+            limit: Maximum number of payments to return
+
+        Returns:
+            List of PENDING Payment instances.
+        """
+        statement = (
+            select(Payment)
+            .where(Payment.status == PaymentStatus.PENDING)
+            .where(Payment.created_at < older_than)
+            .where(Payment.external_id.isnot(None))
+            .order_by(Payment.created_at.asc())
+            .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
