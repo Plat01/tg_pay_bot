@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.venv
+__pycache__
+*.pyc
+postgres_data
+node_modules
+.idea
+.vscode
+tests
+screenshots
+plans
+docs
