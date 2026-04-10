@@ -192,8 +192,6 @@ async def handle_confirm_payment(callback: CallbackQuery) -> None:
         async with async_session_maker() as session:
             payment_service = PaymentService(session)
             user_repository = UserRepository(session)
-            subscription_service = SubscriptionService(session)
-            product_repository = ProductRepository(session)
 
             payment = await payment_service.get_payment_by_id(payment_id)
 
