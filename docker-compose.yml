@@ -5,9 +5,9 @@ services:
       network: host
     container_name: tg_pay_bot_app
     restart: unless-stopped
-    network_mode: host
-    environment:
-      DB_HOST: localhost
+    # network_mode: host
+    # environment:
+    #   DB_HOST: localhost
     env_file:
       - .env
     depends_on:
