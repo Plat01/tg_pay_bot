@@ -42,6 +42,7 @@ class CallbackData:
     TRIAL_SUBSCRIPTION = "trial_subscription"
     TRIAL_ACTIVATE = "trial_activate"
     BUY_SUBSCRIPTION = "buy_subscription"
+    GET_SUBSCRIPTION_LINK = "get_sub_link"  # Format: get_sub_link:{subscription_id}
 
     # Tariffs
     TARIFF_1_MONTH = "tariff_1_month"

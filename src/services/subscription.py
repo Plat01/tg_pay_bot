@@ -20,9 +20,13 @@ class SubscriptionService:
         self.repository = SubscriptionRepository(session)
         self.product_repository = ProductRepository(session)
 
-    async def get_active_subscription(self, user_id: uuid.UUID) -> Subscription | None:
-        """Get active subscription for user by user ID (UUID)."""
-        return await self.repository.get_active_subscription(user_id)
+    async def get_active_subscriptions(self, user_id: uuid.UUID) -> list[Subscription]:
+        """Get all active subscriptions for user by user ID (UUID)."""
+        return await self.repository.get_active_subscriptions(user_id)
+
+    async def get_subscription_by_id(self, subscription_id: uuid.UUID) -> Subscription | None:
+        """Get subscription by ID (UUID)."""
+        return await self.repository.get_subscription_by_id(subscription_id)
 
     async def create_subscription_from_product(
         self,

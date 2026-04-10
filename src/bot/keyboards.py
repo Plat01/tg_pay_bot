@@ -422,3 +422,33 @@ class Keyboards:
         )
 
         return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    @staticmethod
+    def subscription_links(subscriptions: list) -> InlineKeyboardMarkup:
+        """Subscription links keyboard with buttons for each subscription.
+
+        Args:
+            subscriptions: List of Subscription objects with loaded product relationship.
+
+        Returns:
+            InlineKeyboardMarkup with buttons for each subscription link.
+        """
+        buttons = []
+
+        # Add button for each subscription
+        for subscription in subscriptions:
+            product = getattr(subscription, "product", None)
+            subscription_type = product.subscription_type if product else "unknown"
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"🔗 {subscription_type}",
+                        callback_data=f"{CallbackData.GET_SUBSCRIPTION_LINK}:{subscription.id}",
+                    )
+                ]
+            )
+
+        # Add back button
+        buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)])
+
+        return InlineKeyboardMarkup(inline_keyboard=buttons)

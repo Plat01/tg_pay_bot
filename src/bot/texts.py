@@ -66,6 +66,22 @@ class Texts:
         "Нажмите <b>💳 Оплатить</b> для покупки подписки."
     )
 
+    PROFILE_MULTIPLE_SUBSCRIPTIONS = (
+        "💼 <b>Ваш профиль</b>\n\n"
+        "👤 <b>Пользователь:</b> {username}\n"
+        "💰 <b>Баланс:</b> {balance} ₽\n\n"
+        "📌 <b>Ваши подписки:</b>\n"
+        "{subscriptions_list}\n\n"
+        "💡 Нажмите на кнопку ниже для получения VPN ссылки."
+    )
+
+    SUBSCRIPTION_LINK = (
+        "🔗 <b>VPN ссылка для {subscription_type}</b>\n\n"
+        "📅 <b>Действует до:</b> {end_date}\n\n"
+        "{vpn_link}\n\n"
+        "👇 Нажмите на ссылку выше, чтобы скопировать её."
+    )
+
     # Pay message
     PAY_TEXT = (
         "💳 <b>Оплата подписки</b>\n\n"

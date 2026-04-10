@@ -49,15 +49,21 @@ async def cmd_start(message: Message) -> None:
             referral_code=referral_code,
         )
 
-        subscription = await subscription_service.get_active_subscription(db_user.id)
-        if subscription:
-            subscription_status = "✅ Активна"
-            subscription_end = subscription.end_date.strftime("%d.%m.%Y")
+        subscriptions = await subscription_service.get_active_subscriptions(db_user.id)
+        if subscriptions:
+            subscription_status_list = []
+            for sub in subscriptions:
+                product = getattr(sub, "product", None)
+                sub_type = product.subscription_type if product else "unknown"
+                end_date = sub.end_date.strftime("%d.%m.%Y")
+                subscription_status_list.append(f"  • {sub_type} — до {end_date}")
+            subscription_status = "\n".join(subscription_status_list)
             show_trial_button = False
         else:
             subscription_status = "❌ Не активна"
-            subscription_end = "—"
             show_trial_button = db_user.is_new
+
+        subscription_end = "—" if not subscriptions else ""
 
         await message.answer(
             Texts.START_WELCOME.format(
@@ -87,15 +93,21 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
             await callback.answer()
             return
 
-        subscription = await subscription_service.get_active_subscription(db_user.id)
-        if subscription:
-            subscription_status = "✅ Активна"
-            subscription_end = subscription.end_date.strftime("%d.%m.%Y")
+        subscriptions = await subscription_service.get_active_subscriptions(db_user.id)
+        if subscriptions:
+            subscription_status_list = []
+            for sub in subscriptions:
+                product = getattr(sub, "product", None)
+                sub_type = product.subscription_type if product else "unknown"
+                end_date = sub.end_date.strftime("%d.%m.%Y")
+                subscription_status_list.append(f"  • {sub_type} — до {end_date}")
+            subscription_status = "\n".join(subscription_status_list)
             show_trial_button = False
         else:
             subscription_status = "❌ Не активна"
-            subscription_end = "—"
             show_trial_button = db_user.is_new
+
+        subscription_end = "—" if not subscriptions else ""
 
         await callback.message.edit_text(
             Texts.START_MAIN_MENU.format(
@@ -134,10 +146,8 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
             await callback.answer()
             return
 
-        # Get active subscription using user UUID
-        subscription = await subscription_service.get_active_subscription(user.id)
+        subscriptions = await subscription_service.get_active_subscriptions(user.id)
 
-        # Build display name: first_name last_name, or username if not available
         name_parts = []
         if user.first_name:
             name_parts.append(user.first_name)
@@ -145,29 +155,26 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
             name_parts.append(user.last_name)
         display_name = " ".join(name_parts) if name_parts else (user.username or f"#{user.id}")
 
-        if subscription:
-            # Format subscription info
-            sub_info = subscription_service.get_subscription_info(subscription)
-            end_date_str = subscription.end_date.strftime("%d.%m.%Y %H:%M")
-            time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
+        if subscriptions:
+            subscriptions_list = []
+            for i, sub in enumerate(subscriptions, 1):
+                product = getattr(sub, "product", None)
+                sub_info = subscription_service.get_subscription_info(sub)
+                sub_type = product.subscription_type if product else "unknown"
+                end_date_str = sub.end_date.strftime("%d.%m.%Y %H:%M")
+                time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
+                subscriptions_list.append(f"{i}. {sub_type} — до {end_date_str} ({time_left_str})")
 
-            # Get product information from sub_info
-            device_limit = sub_info["device_limit"]
-            subscription_type = sub_info["subscription_type"]
-
-            profile_text = Texts.PROFILE_TEXT.format(
+            profile_text = Texts.PROFILE_MULTIPLE_SUBSCRIPTIONS.format(
                 username=display_name,
-                subscription_end=end_date_str,
-                time_left=time_left_str,
-                device_limit=device_limit,
-                subscription_type=subscription_type,
                 balance=user.balance,
+                subscriptions_list="\n".join(subscriptions_list),
             )
 
             await callback.message.edit_text(
                 profile_text,
                 parse_mode="HTML",
-                reply_markup=Keyboards.back_to_menu(),
+                reply_markup=Keyboards.subscription_links(subscriptions),
             )
         else:
             profile_text = Texts.PROFILE_NO_SUBSCRIPTION.format(
@@ -175,7 +182,6 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
                 balance=user.balance,
             )
 
-            # Show pay button when no subscription
             await callback.message.edit_text(
                 profile_text,
                 parse_mode="HTML",
@@ -417,9 +423,9 @@ async def handle_trial_subscription_callback(callback: CallbackQuery) -> None:
             await callback.answer()
             return
 
-        subscription = await subscription_service.get_active_subscription(user.id)
+        subscriptions = await subscription_service.get_active_subscriptions(user.id)
 
-        if subscription or not user.is_new:
+        if subscriptions or not user.is_new:
             await callback.message.edit_text(
                 Texts.TRIAL_ALREADY_USED,
                 parse_mode="HTML",
@@ -465,9 +471,9 @@ async def handle_trial_activate_callback(callback: CallbackQuery) -> None:
             await callback.answer()
             return
 
-        subscription = await subscription_service.get_active_subscription(user.id)
+        subscriptions = await subscription_service.get_active_subscriptions(user.id)
 
-        if subscription or not user.is_new:
+        if subscriptions or not user.is_new:
             await callback.message.edit_text(
                 Texts.TRIAL_ALREADY_USED,
                 parse_mode="HTML",
@@ -497,6 +503,51 @@ async def handle_trial_activate_callback(callback: CallbackQuery) -> None:
         await callback.answer()
 
         logger.info(f"User {user.telegram_id} activated trial subscription")
+
+
+async def handle_get_subscription_link_callback(callback: CallbackQuery) -> None:
+    """Handle get_sub_link callback - show VPN link for specific subscription."""
+    async with async_session_maker() as session:
+        subscription_service = SubscriptionService(session)
+
+        subscription_id_str = callback.data.split(":")[1] if callback.data else None
+        if not subscription_id_str:
+            await callback.answer("❌ Ошибка: ID подписки не найден", show_alert=True)
+            return
+
+        import uuid
+
+        try:
+            subscription_id = uuid.UUID(subscription_id_str)
+        except ValueError:
+            await callback.answer("❌ Ошибка: неверный ID подписки", show_alert=True)
+            return
+
+        subscription = await subscription_service.get_subscription_by_id(subscription_id)
+
+        if not subscription:
+            await callback.answer("❌ Подписка не найдена", show_alert=True)
+            return
+
+        product = getattr(subscription, "product", None)
+        if not product:
+            await callback.answer("❌ Продукт подписки не найден", show_alert=True)
+            return
+
+        subscription_type = product.subscription_type
+        end_date_str = subscription.end_date.strftime("%d.%m.%Y %H:%M")
+        vpn_link = product.happ_link
+
+        await callback.message.edit_text(
+            Texts.SUBSCRIPTION_LINK.format(
+                subscription_type=subscription_type,
+                end_date=end_date_str,
+                vpn_link=f"<code>{vpn_link}</code>",
+            ),
+            parse_mode="HTML",
+            reply_markup=Keyboards.back_to_menu(),
+        )
+        await callback.answer()
 
 
 async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMContext) -> None:
@@ -616,6 +667,10 @@ def register_start_handlers(dp: Dispatcher) -> None:
     dp.callback_query.register(
         handle_deposit_amount_callback,
         F.data.startswith("deposit_"),
+    )
+    dp.callback_query.register(
+        handle_get_subscription_link_callback,
+        F.data.startswith(CallbackData.GET_SUBSCRIPTION_LINK),
     )
 
     # Register payment handlers

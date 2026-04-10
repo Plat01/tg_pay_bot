@@ -17,8 +17,8 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         """Initialize subscription repository."""
         super().__init__(Subscription, session)
 
-    async def get_active_subscription(self, user_id: uuid.UUID) -> Subscription | None:
-        """Get active subscription for user by user ID (UUID)."""
+    async def get_active_subscriptions(self, user_id: uuid.UUID) -> list[Subscription]:
+        """Get all active subscriptions for user by user ID (UUID)."""
         statement = (
             select(Subscription)
             .options(selectinload(Subscription.product))
@@ -26,6 +26,16 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             .where(Subscription.is_active == True)
             .where(Subscription.end_date > datetime.now(timezone.utc))
             .order_by(desc(Subscription.end_date))
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
+
+    async def get_subscription_by_id(self, subscription_id: uuid.UUID) -> Subscription | None:
+        """Get subscription by ID (UUID)."""
+        statement = (
+            select(Subscription)
+            .options(selectinload(Subscription.product))
+            .where(Subscription.id == subscription_id)
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
