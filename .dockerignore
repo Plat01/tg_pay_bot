@@ -2,6 +2,10 @@
 .gitignore
 .env
 .venv
+.idea
+.vscode
+.pytest_cache
+.errors
 __pycache__
 *.pyc
 postgres_data
