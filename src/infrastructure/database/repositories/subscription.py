@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import uuid
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.infrastructure.database.repositories.base import BaseRepository
 from src.models.subscription import Subscription
@@ -20,6 +21,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         """Get active subscription for user by user ID (UUID)."""
         statement = (
             select(Subscription)
+            .options(selectinload(Subscription.product))
             .where(Subscription.user_id == user_id)
             .where(Subscription.is_active == True)
             .where(Subscription.end_date > datetime.now(timezone.utc))
@@ -34,6 +36,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         """Get all subscriptions for user by user ID (UUID)."""
         statement = (
             select(Subscription)
+            .options(selectinload(Subscription.product))
             .where(Subscription.user_id == user_id)
             .where(Subscription.is_active == True)  # Only include active subscriptions
             .order_by(desc(Subscription.created_at))

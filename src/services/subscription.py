@@ -131,7 +131,7 @@ class SubscriptionService:
 
         # Get product information
         product = getattr(subscription, "product", None)
-        subscription_type = product.subscription_type.value if product else "unknown"
+        subscription_type = product.subscription_type if product else "unknown"
         device_limit = product.device_limit if product else 1
 
         return {

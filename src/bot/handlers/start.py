@@ -151,11 +151,9 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
             end_date_str = subscription.end_date.strftime("%d.%m.%Y %H:%M")
             time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
 
-            # Get product information
-            device_limit = subscription.product.device_limit if subscription.product else 1
-            subscription_type = (
-                subscription.product.subscription_type.value if subscription.product else "unknown"
-            )
+            # Get product information from sub_info
+            device_limit = sub_info["device_limit"]
+            subscription_type = sub_info["subscription_type"]
 
             profile_text = Texts.PROFILE_TEXT.format(
                 username=display_name,
@@ -163,6 +161,7 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
                 time_left=time_left_str,
                 device_limit=device_limit,
                 subscription_type=subscription_type,
+                balance=user.balance,
             )
 
             await callback.message.edit_text(
