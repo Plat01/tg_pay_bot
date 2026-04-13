@@ -41,6 +41,23 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
+    async def get_active_subscription_by_id(
+        self, subscription_id: uuid.UUID
+    ) -> Subscription | None:
+        """Get active subscription by ID (UUID).
+
+        Returns subscription only if it's active AND not expired.
+        """
+        statement = (
+            select(Subscription)
+            .options(selectinload(Subscription.product))
+            .where(Subscription.id == subscription_id)
+            .where(Subscription.is_active == True)
+            .where(Subscription.end_date > datetime.now(UTC))
+        )
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
     async def get_user_subscriptions(
         self, user_id: uuid.UUID, limit: int = 10
     ) -> list[Subscription]:

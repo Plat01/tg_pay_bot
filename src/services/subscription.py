@@ -28,6 +28,12 @@ class SubscriptionService:
         """Get subscription by ID (UUID)."""
         return await self.repository.get_subscription_by_id(subscription_id)
 
+    async def get_active_subscription_by_id(
+        self, subscription_id: uuid.UUID
+    ) -> Subscription | None:
+        """Get active subscription by ID (UUID). Returns None if expired or inactive."""
+        return await self.repository.get_active_subscription_by_id(subscription_id)
+
     async def create_subscription_from_product(
         self,
         user_id: uuid.UUID,

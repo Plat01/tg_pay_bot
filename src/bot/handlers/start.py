@@ -560,10 +560,10 @@ async def handle_get_subscription_link_callback(callback: CallbackQuery) -> None
             await callback.answer("❌ Ошибка: неверный ID подписки", show_alert=True)
             return
 
-        subscription = await subscription_service.get_subscription_by_id(subscription_id)
+        subscription = await subscription_service.get_active_subscription_by_id(subscription_id)
 
         if not subscription:
-            await callback.answer("❌ Подписка не найдена", show_alert=True)
+            await callback.answer("❌ Подписка не найдена или истекла", show_alert=True)
             return
 
         product = getattr(subscription, "product", None)
