@@ -1,12 +1,13 @@
 """Background scheduler for periodic tasks."""
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from src.bot.bot import bot
+from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
 from src.config import settings
 from src.infrastructure.database import async_session_maker
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 scheduler = AsyncIOScheduler()
+
+
+MSK_TZ = timezone(timedelta(hours=3))
 
 
 async def check_pending_payments_job() -> None:
@@ -275,28 +279,29 @@ async def check_expiring_subscriptions_job() -> None:
     """Job to check and notify users about expiring subscriptions.
 
     Called by APScheduler every SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_HOURS.
-    Finds subscriptions expiring within 24 hours and sends notifications.
+    Finds subscriptions expiring within a specific window and sends notifications.
     """
     hours_before = getattr(settings, "subscription_expiry_notify_hours", 24)
+    check_interval = getattr(settings, "subscription_expiry_check_interval_hours", 1)
 
     logger.info(
-        f"Checking for subscriptions expiring within {hours_before} hours",
-        extra={"hours_before": hours_before},
+        f"Checking for subscriptions expiring in window [{hours_before - check_interval}, {hours_before}] hours",
+        extra={"hours_before": hours_before, "check_interval": check_interval},
     )
 
     async with async_session_maker() as session:
         subscription_service = SubscriptionService(session)
 
         expiring_subscriptions = await subscription_service.repository.get_expiring_subscriptions(
-            hours_before=hours_before, limit=100
+            hours_before=hours_before, check_interval_hours=check_interval, limit=100
         )
 
         if not expiring_subscriptions:
-            logger.debug("No expiring subscriptions found")
+            logger.debug("No expiring subscriptions found in the window")
             return
 
         logger.info(
-            f"Found {len(expiring_subscriptions)} subscriptions expiring within {hours_before}h",
+            f"Found {len(expiring_subscriptions)} subscriptions expiring in the window",
             extra={"count": len(expiring_subscriptions)},
         )
 
@@ -313,13 +318,18 @@ async def check_expiring_subscriptions_job() -> None:
                 product = subscription.product
                 subscription_type = product.subscription_type if product else "unknown"
 
+                # Convert end_date to Moscow time
+                end_date_msk = subscription.end_date.astimezone(MSK_TZ)
+                end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M")
+
                 await bot.send_message(
                     user.telegram_id,
                     Texts.SUBSCRIPTION_EXPIRING.format(
-                        end_date=subscription.end_date.strftime("%d.%m.%Y %H:%M"),
+                        end_date=f"{end_date_str} (МСК)",
                         subscription_type=subscription_type,
                     ),
                     parse_mode="HTML",
+                    reply_markup=Keyboards.main_menu(show_trial_button=False),
                 )
 
                 logger.info(
@@ -329,6 +339,7 @@ async def check_expiring_subscriptions_job() -> None:
                         "telegram_id": user.telegram_id,
                         "subscription_id": str(subscription.id),
                         "end_date": subscription.end_date.isoformat(),
+                        "end_date_msk": end_date_msk.isoformat(),
                     },
                 )
 

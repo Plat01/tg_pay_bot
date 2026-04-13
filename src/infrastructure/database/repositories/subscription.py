@@ -77,26 +77,33 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         return await self.update(subscription, {"is_active": False})
 
     async def get_expiring_subscriptions(
-        self, hours_before: int = 24, limit: int = 100
+        self, hours_before: int = 24, check_interval_hours: int = 1, limit: int = 100
     ) -> list[Subscription]:
-        """Get active subscriptions expiring within specified hours.
+        """Get active subscriptions expiring within a specific window.
+
+        Selects subscriptions that will expire in the window:
+        [hours_before - check_interval_hours, hours_before]
+
+        This prevents duplicate notifications when checking periodically.
 
         Args:
-            hours_before: Number of hours to look ahead for expiring subscriptions.
+            hours_before: Upper bound of the window (hours before expiry).
+            check_interval_hours: Width of the window (check frequency).
             limit: Maximum number of subscriptions to return.
 
         Returns:
-            List of active subscriptions expiring within the specified hours.
+            List of active subscriptions expiring within the specified window.
         """
         now = datetime.now(UTC)
-        threshold = now + timedelta(hours=hours_before)
+        window_start = now + timedelta(hours=hours_before - check_interval_hours)
+        window_end = now + timedelta(hours=hours_before)
 
         statement = (
             select(Subscription)
             .options(selectinload(Subscription.product), selectinload(Subscription.user))
             .where(Subscription.is_active == True)
-            .where(Subscription.end_date > now)
-            .where(Subscription.end_date <= threshold)
+            .where(Subscription.end_date > window_start)
+            .where(Subscription.end_date <= window_end)
             .order_by(Subscription.end_date)
             .limit(limit)
         )
