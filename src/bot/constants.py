@@ -77,6 +77,7 @@ class Commands:
     ALL_MESSAGE = "all_message"
     PAID_MESSAGE = "pay_message"
     PRICES = "prices"
+    SUBSCRIPTIONS = "subscriptions"
 
 
 class Limits:

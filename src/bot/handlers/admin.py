@@ -1,17 +1,20 @@
 """Admin command handlers for administrative functions."""
 
+import asyncio
 import logging
-import uuid
+
 from aiogram import Dispatcher, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+
+from src.bot.constants import CallbackData, Commands
 from src.config import settings
-from src.bot.constants import Commands, CallbackData
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import ProductRepository, UserRepository
-from src.models.product import SubscriptionType, Product
+from src.models.product import Product, SubscriptionType
+from src.models.subscription import Subscription
 from src.services.tariff import TariffService
 
 logger = logging.getLogger(__name__)
@@ -443,6 +446,89 @@ async def process_paid_message(message: Message, state: FSMContext) -> None:
         await state.clear()
 
 
+async def cmd_subscriptions(message: Message) -> None:
+    """Admin command to show all users with active subscriptions."""
+    if not message.from_user:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    user_id = str(message.from_user.id)
+    if user_id not in settings.admin_id_list:
+        logger.warning(f"Non-admin user {user_id} tried to access subscriptions command")
+        await message.answer("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    try:
+        async with async_session_maker() as session:
+            from zoneinfo import ZoneInfo
+
+            from src.infrastructure.database.repositories import SubscriptionRepository
+
+            subscription_repository = SubscriptionRepository(session)
+            subscriptions = (
+                await subscription_repository.get_all_active_subscriptions_with_details()
+            )
+
+            if not subscriptions:
+                await message.answer("📋 Нет активных подписок.")
+                return
+
+            msk_tz = ZoneInfo("Europe/Moscow")
+
+            # Group subscriptions by user
+            user_subscriptions: dict[str, list[Subscription]] = {}
+            for sub in subscriptions:
+                if sub.user:
+                    telegram_id = sub.user.telegram_id
+                    if telegram_id not in user_subscriptions:
+                        user_subscriptions[telegram_id] = []
+                    user_subscriptions[telegram_id].append(sub)
+
+            # Build message
+            lines = [f"📋 <b>Активные подписки ({len(subscriptions)} шт):</b>\n"]
+
+            for telegram_id, subs in user_subscriptions.items():
+                user = subs[0].user
+                username = f"@{user.username}" if user.username else "Без username"
+                user_link = f'<a href="tg://user?id={telegram_id}">{username}</a>'
+
+                lines.append(f"\n👤 {user_link} (ID: {telegram_id})")
+
+                for sub in subs:
+                    if sub.product:
+                        sub_type = sub.product.subscription_type
+                        end_date_msk = sub.end_date.astimezone(msk_tz)
+                        end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M МСК")
+                        lines.append(f"  • {sub_type}: до {end_date_str}")
+
+            # Send in chunks if message is too long
+            full_message = "\n".join(lines)
+            if len(full_message) <= 4096:
+                await message.answer(full_message, parse_mode="HTML")
+            else:
+                # Split into chunks
+                chunks = []
+                current_chunk = lines[0] + "\n"  # Header
+                for line in lines[1:]:
+                    if len(current_chunk) + len(line) + 1 > 4096:
+                        chunks.append(current_chunk)
+                        current_chunk = line
+                    else:
+                        current_chunk += "\n" + line
+                if current_chunk:
+                    chunks.append(current_chunk)
+
+                for chunk in chunks:
+                    await message.answer(chunk, parse_mode="HTML")
+                    await asyncio.sleep(0.1)  # Avoid rate limiting
+
+            logger.info(f"Admin {user_id} viewed all subscriptions")
+
+    except Exception as e:
+        logger.error(f"Error showing subscriptions: {e}")
+        await message.answer(f"❌ Произошла ошибка при получении подписок: {e}")
+
+
 async def cmd_prices(message: Message) -> None:
     """Admin command to show current prices with edit buttons."""
     if not message.from_user:
@@ -479,19 +565,19 @@ async def cmd_prices(message: Message) -> None:
                 [
                     InlineKeyboardButton(
                         text=f"✏️ Изменить 1 месяц ({monthly_price} ₽)",
-                        callback_data=f"edit_price:monthly",
+                        callback_data="edit_price:monthly",
                     )
                 ],
                 [
                     InlineKeyboardButton(
                         text=f"✏️ Изменить 3 месяца ({quarterly_price} ₽)",
-                        callback_data=f"edit_price:quarterly",
+                        callback_data="edit_price:quarterly",
                     )
                 ],
                 [
                     InlineKeyboardButton(
                         text=f"✏️ Изменить 12 месяцев ({yearly_price} ₽)",
-                        callback_data=f"edit_price:yearly",
+                        callback_data="edit_price:yearly",
                     )
                 ],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
@@ -648,6 +734,9 @@ def register_admin_handlers(dp: Dispatcher) -> None:
 
     # Prices command
     dp.message.register(cmd_prices, Command(Commands.PRICES))
+
+    # Subscriptions list command
+    dp.message.register(cmd_subscriptions, Command(Commands.SUBSCRIPTIONS))
 
     # Broadcast commands (only for admins)
     dp.message.register(cmd_all_message, Command(Commands.ALL_MESSAGE))

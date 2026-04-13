@@ -24,7 +24,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             select(Subscription)
             .options(selectinload(Subscription.product))
             .where(Subscription.user_id == user_id)
-            .where(Subscription.is_active == True)
+            .where(Subscription.is_active)
             .where(Subscription.end_date > datetime.now(UTC))
             .order_by(desc(Subscription.end_date))
         )
@@ -52,7 +52,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             select(Subscription)
             .options(selectinload(Subscription.product))
             .where(Subscription.id == subscription_id)
-            .where(Subscription.is_active == True)
+            .where(Subscription.is_active)
             .where(Subscription.end_date > datetime.now(UTC))
         )
         result = await self.session.execute(statement)
@@ -66,7 +66,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             select(Subscription)
             .options(selectinload(Subscription.product))
             .where(Subscription.user_id == user_id)
-            .where(Subscription.is_active == True)  # Only include active subscriptions
+            .where(Subscription.is_active)  # Only include active subscriptions
             .order_by(desc(Subscription.created_at))
             .limit(limit)
         )
@@ -118,11 +118,28 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         statement = (
             select(Subscription)
             .options(selectinload(Subscription.product), selectinload(Subscription.user))
-            .where(Subscription.is_active == True)
+            .where(Subscription.is_active)
             .where(Subscription.end_date > window_start)
             .where(Subscription.end_date <= window_end)
             .order_by(Subscription.end_date)
             .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
+
+    async def get_all_active_subscriptions_with_details(self) -> list[Subscription]:
+        """Get all active subscriptions with user and product details.
+
+        Returns:
+            List of active subscriptions with loaded user and product relationships,
+            ordered by end_date ascending.
+        """
+        statement = (
+            select(Subscription)
+            .options(selectinload(Subscription.product), selectinload(Subscription.user))
+            .where(Subscription.is_active)
+            .where(Subscription.end_date > datetime.now(UTC))
+            .order_by(Subscription.end_date)
         )
         result = await self.session.execute(statement)
         return list(result.scalars().all())
