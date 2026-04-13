@@ -17,14 +17,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from src.services.tariff import TariffService
+from src.services.referral import ReferralService
 from src.config import settings
 from src.infrastructure.database.repositories import (
     PaymentRepository,
     ProductRepository,
     UserRepository,
 )
-from src.infrastructure.payments import PlategaClient, PlategaPaymentMethod
-from src.infrastructure.payments.schemas import PaymentCreateRequest, PaymentCreateResponse
+from src.infrastructure.payments import (
+    PaymentProvider,
+    PaymentProviderFactory,
+    CreatePaymentResult,
+    PlategaPaymentMethod,
+)
 from src.models.payment import Payment, PaymentStatus, PaymentType
 from src.models.product import SubscriptionType
 from src.models.user import User
