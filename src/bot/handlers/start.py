@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
 from src.config import settings
 from src.infrastructure.database import async_session_maker
+from src.models.payment import PaymentStatus
 from src.services.subscription import SubscriptionService
 from src.services.tariff import TariffService
 from src.services.user import UserService
@@ -541,6 +543,60 @@ async def handle_trial_activate_callback(callback: CallbackQuery) -> None:
         logger.info(f"User {user.telegram_id} activated trial subscription")
 
 
+async def handle_deposit_history_callback(callback: CallbackQuery) -> None:
+    """Handle deposit history button - show payment history."""
+    from src.services.payment import PaymentService
+
+    async with async_session_maker() as session:
+        user_service = UserService(session)
+        payment_service = PaymentService(session)
+
+        user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
+
+        if not user:
+            await callback.message.edit_text(
+                Texts.ERROR_NOT_REGISTERED,
+                reply_markup=Keyboards.back_to_menu(),
+            )
+            await callback.answer()
+            return
+
+        # Get user payments
+        payments = await payment_service.get_user_payments(str(callback.from_user.id))
+
+        if not payments:
+            await callback.message.edit_text(
+                Texts.DEPOSIT_HISTORY_EMPTY,
+                reply_markup=Keyboards.back_to_menu(),
+            )
+            await callback.answer()
+            return
+
+        # Format payment history
+        history_lines = []
+        for payment in payments[:10]:  # Show last 10 payments
+            status_emoji = {
+                PaymentStatus.COMPLETED: "✅",
+                PaymentStatus.PENDING: "⏳",
+                PaymentStatus.FAILED: "❌",
+                PaymentStatus.CANCELLED: "🚫",
+            }.get(payment.status, "❓")
+
+            date_str = payment.created_at.strftime("%d.%m.%Y %H:%M")
+            history_lines.append(
+                f"{status_emoji} {date_str} — {payment.amount} ₽ ({payment.payment_provider or 'unknown'})"
+            )
+
+        history_text = Texts.DEPOSIT_HISTORY_TITLE + "\n".join(history_lines)
+
+        await callback.message.edit_text(
+            history_text,
+            parse_mode="HTML",
+            reply_markup=Keyboards.back_to_menu(),
+        )
+        await callback.answer()
+
+
 async def handle_get_subscription_link_callback(callback: CallbackQuery) -> None:
     """Handle get_sub_link callback - show VPN link for specific subscription."""
     async with async_session_maker() as session:
@@ -591,14 +647,7 @@ async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMCont
 
     Starts deposit flow with selected amount.
     """
-    from src.bot.handlers.deposit import (
-        DepositStates,
-        process_amount_preset,
-    )
-
-    # DEBUG: Log callback data to diagnose the issue
-    logger.warning(f"DEBUG: callback.data = {callback.data!r}")
-    logger.warning(f"DEBUG: callback type = {type(callback)}")
+    from src.bot.handlers.deposit import DepositStates, get_payment_method_keyboard
 
     # Parse amount from callback data
     amount_map = {
@@ -612,28 +661,20 @@ async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMCont
 
     amount = amount_map.get(callback.data)
     if not amount:
-        logger.warning(f"DEBUG: Invalid callback data, amount not found")
         await callback.answer("❌ Неверная сумма", show_alert=True)
         return
 
-    logger.warning(f"DEBUG: amount = {amount}")
+    # Store amount and proceed to method selection
+    await state.update_data(amount=Decimal(amount))
+    await state.set_state(DepositStates.method)
 
-    # Set FSM state and process amount
-    await state.set_state(DepositStates.amount)
-
-    # Create a mock callback with data in format "amount:{amount}"
-    # WARNING: This will fail because CallbackQuery is frozen in aiogram 3.x
-    original_data = callback.data
-    logger.warning(
-        f"DEBUG: Attempting to set callback.data from {original_data!r} to 'amount:{amount}'"
+    # Show payment method selection
+    await callback.message.edit_text(
+        Texts.DEPOSIT_AMOUNT_SELECTED.format(amount=amount),
+        parse_mode="HTML",
+        reply_markup=get_payment_method_keyboard(),
     )
-    callback.data = f"amount:{amount}"
-
-    # Call the deposit handler
-    await process_amount_preset(callback, state)
-
-    # Restore original callback data
-    callback.data = original_data
+    await callback.answer()
 
 
 def register_start_handlers(dp: Dispatcher) -> None:
@@ -702,7 +743,20 @@ def register_start_handlers(dp: Dispatcher) -> None:
     )
     dp.callback_query.register(
         handle_deposit_amount_callback,
-        F.data.startswith("deposit_"),
+        F.data.in_(
+            [
+                CallbackData.DEPOSIT_AMOUNT_50,
+                CallbackData.DEPOSIT_AMOUNT_100,
+                CallbackData.DEPOSIT_AMOUNT_250,
+                CallbackData.DEPOSIT_AMOUNT_500,
+                CallbackData.DEPOSIT_AMOUNT_1000,
+                CallbackData.DEPOSIT_AMOUNT_2500,
+            ]
+        ),
+    )
+    dp.callback_query.register(
+        handle_deposit_history_callback,
+        F.data.startswith(CallbackData.DEPOSIT_HISTORY),
     )
     dp.callback_query.register(
         handle_get_subscription_link_callback,
