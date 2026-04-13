@@ -3,6 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
@@ -11,10 +12,12 @@ if TYPE_CHECKING:
     from src.models.user import User
     from src.models.product import Product
 
+MSK_TZ = ZoneInfo("Europe/Moscow")
 
-def _utc_now() -> datetime:
-    """Get current UTC datetime (Python 3.12+ compatible)."""
-    return datetime.now(timezone.utc)
+
+def _msk_now() -> datetime:
+    """Get current Moscow datetime (UTC+3)."""
+    return datetime.now(MSK_TZ)
 
 
 class Subscription(SQLModel, table=True):
@@ -28,13 +31,13 @@ class Subscription(SQLModel, table=True):
     is_active: bool = Field(default=True)
     end_date: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     start_date: datetime = Field(
-        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+        default_factory=_msk_now, sa_column=Column(DateTime(timezone=True), nullable=False)
     )
     created_at: datetime = Field(
-        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+        default_factory=_msk_now, sa_column=Column(DateTime(timezone=True), nullable=False)
     )
     updated_at: datetime = Field(
-        default_factory=_utc_now, sa_column=Column(DateTime(timezone=True), nullable=False)
+        default_factory=_msk_now, sa_column=Column(DateTime(timezone=True), nullable=False)
     )
 
     # Relationships

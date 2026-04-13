@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,8 @@ from src.services.tariff import TariffService
 from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
+
+MSK_TZ = ZoneInfo("Europe/Moscow")
 
 
 async def cmd_start(message: Message) -> None:
@@ -57,7 +60,7 @@ async def cmd_start(message: Message) -> None:
                 product = getattr(sub, "product", None)
                 sub_info = subscription_service.get_subscription_info(sub)
                 sub_type = product.subscription_type if product else "unknown"
-                end_date_str = sub.end_date.strftime("%d.%m.%Y %H:%M")
+                end_date_str = sub.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
                 time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
                 subscription_status_list.append(
                     f"{i}. {sub_type} — до {end_date_str} ({time_left_str})"
@@ -102,7 +105,7 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
                 product = getattr(sub, "product", None)
                 sub_info = subscription_service.get_subscription_info(sub)
                 sub_type = product.subscription_type if product else "unknown"
-                end_date_str = sub.end_date.strftime("%d.%m.%Y %H:%M")
+                end_date_str = sub.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
                 time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
                 subscription_status_list.append(
                     f"{i}. {sub_type} — до {end_date_str} ({time_left_str})"
@@ -164,7 +167,7 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
                 product = getattr(sub, "product", None)
                 sub_info = subscription_service.get_subscription_info(sub)
                 sub_type = product.subscription_type if product else "unknown"
-                end_date_str = sub.end_date.strftime("%d.%m.%Y %H:%M")
+                end_date_str = sub.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
                 time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
                 subscriptions_list.append(f"{i}. {sub_type} — до {end_date_str} ({time_left_str})")
 
@@ -572,7 +575,7 @@ async def handle_get_subscription_link_callback(callback: CallbackQuery) -> None
             return
 
         subscription_type = product.subscription_type
-        end_date_str = subscription.end_date.strftime("%d.%m.%Y %H:%M")
+        end_date_str = subscription.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
         vpn_link = product.happ_link
 
         await callback.message.edit_text(

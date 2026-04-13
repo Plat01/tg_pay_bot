@@ -3,6 +3,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +11,8 @@ from src.infrastructure.database.repositories import SubscriptionRepository
 from src.models.subscription import Subscription
 from src.models.product import Product, SubscriptionType
 from src.infrastructure.database.repositories import ProductRepository
+
+MSK_TZ = ZoneInfo("Europe/Moscow")
 
 
 class SubscriptionService:
@@ -49,13 +52,13 @@ class SubscriptionService:
         if not product:
             raise ValueError(f"Product with ID {product_id} not found")
 
-        end_date = datetime.now(timezone.utc) + timedelta(days=product.duration_days)
+        end_date = datetime.now(MSK_TZ) + timedelta(days=product.duration_days)
 
         return await self.repository.create_subscription(
             user_id=user_id,
             product_id=product_id,
             end_date=end_date,
-            start_date=datetime.now(timezone.utc),
+            start_date=datetime.now(MSK_TZ),
         )
 
     async def create_subscription_by_type(
@@ -74,13 +77,13 @@ class SubscriptionService:
         if not product:
             raise ValueError(f"No product found for subscription type: {subscription_type}")
 
-        end_date = datetime.now(timezone.utc) + timedelta(days=product.duration_days)
+        end_date = datetime.now(MSK_TZ) + timedelta(days=product.duration_days)
 
         return await self.repository.create_subscription(
             user_id=user_id,
             product_id=product.id,
             end_date=end_date,
-            start_date=datetime.now(timezone.utc),
+            start_date=datetime.now(MSK_TZ),
         )
 
     async def activate_trial(
@@ -115,13 +118,13 @@ class SubscriptionService:
                 raise ValueError(f"Product with ID {product_id} not found")
             duration_days = product.duration_days
 
-        end_date = datetime.now(timezone.utc) + timedelta(days=duration_days)
+        end_date = datetime.now(MSK_TZ) + timedelta(days=duration_days)
 
         return await self.repository.create_subscription(
             user_id=user_id,
             product_id=product_id,
             end_date=end_date,
-            start_date=datetime.now(timezone.utc),
+            start_date=datetime.now(MSK_TZ),
         )
 
     def get_subscription_info(self, subscription: Subscription) -> dict:
