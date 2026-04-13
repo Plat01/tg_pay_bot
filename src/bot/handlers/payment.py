@@ -323,6 +323,131 @@ async def handle_confirm_payment(callback: CallbackQuery) -> None:
         )
 
 
+async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
+    """Handle payment with balance - check funds and process payment.
+
+    Args:
+        callback: Telegram callback query.
+    """
+    from src.services.user import UserService
+    from src.services.subscription import SubscriptionService
+    from src.infrastructure.database.repositories import ProductRepository
+    from src.config import settings
+
+    try:
+        tariff_type = callback.data.split(":")[1] if callback.data else None
+        if not tariff_type:
+            await callback.answer("❌ Неверный тариф", show_alert=True)
+            return
+
+        async with async_session_maker() as session:
+            tariff_service = TariffService(session)
+            user_service = UserService(session)
+            payment_service = PaymentService(session)
+            subscription_service = SubscriptionService(session)
+            product_repository = ProductRepository(session)
+
+            tariff_data = await tariff_service.get_tariff_data(tariff_type)
+            if not tariff_data:
+                await callback.answer("❌ Тариф не найден", show_alert=True)
+                return
+
+            amount = Decimal(str(tariff_data["price"]))
+            user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
+
+            if not user:
+                await callback.answer("❌ Пользователь не найден", show_alert=True)
+                return
+
+            # Check balance
+            if user.balance < amount:
+                missing = amount - user.balance
+                await callback.message.edit_text(
+                    Texts.PAYMENT_BALANCE_INSUFFICIENT_FUNDS.format(
+                        balance=user.balance,
+                        required=amount,
+                        missing=missing,
+                        min_deposit=50,
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=Keyboards.balance_insufficient(),
+                )
+                await callback.answer()
+                return
+
+            # Create payment with balance provider
+            payment = await payment_service.create_payment(
+                telegram_id=str(callback.from_user.id),
+                amount=amount,
+                payment_provider="balance",
+                description=f"Подписка: {tariff_data['label']} (с баланса)",
+            )
+
+            # Update payment status to COMPLETED immediately
+            payment = await payment_service.complete_payment(payment)
+
+            # Deduct balance
+            new_balance = user.balance - amount
+            await user_service.update_balance(user, new_balance)
+
+            # Get product
+            product = await product_repository.get_product_by_subscription_type(tariff_type)
+            if not product:
+                await callback.message.edit_text(
+                    "❌ Продукт не найден. Обратитесь в поддержку.",
+                    parse_mode="HTML",
+                    reply_markup=Keyboards.error_with_support_link(),
+                )
+                await callback.answer()
+                return
+
+            # Create subscription
+            subscription = await subscription_service.create_subscription(
+                user_id=user.id,
+                product_id=product.id,
+                duration_days=product.duration_days,
+            )
+
+            logger.info(
+                f"Subscription purchased with balance",
+                extra={
+                    "user_id": user.id,
+                    "payment_id": payment.id,
+                    "subscription_id": subscription.id,
+                    "amount": str(amount),
+                    "new_balance": str(new_balance),
+                },
+            )
+
+            await callback.message.edit_text(
+                Texts.PAYMENT_BALANCE_SUCCESS.format(
+                    amount=amount,
+                    balance=new_balance,
+                    duration=product.duration_days,
+                    vpn_link=product.happ_link,
+                ),
+                parse_mode="HTML",
+                reply_markup=Keyboards.back_to_menu(),
+            )
+            await callback.answer()
+
+    except Exception as e:
+        logger.error(
+            f"Failed to process balance payment: {e}",
+            extra={
+                "user_id": callback.from_user.id,
+                "tariff_type": tariff_type if "tariff_type" in locals() else None,
+            },
+        )
+        await callback.message.edit_text(
+            "❌ <b>Ошибка оплаты с баланса</b>\n\n"
+            "Не удалось обработать платеж. Обратитесь в поддержку.",
+            parse_mode="HTML",
+            reply_markup=Keyboards.error_with_support_link(),
+        )
+        await callback.answer()
+
+
 def register_payment_handlers(dp: Dispatcher) -> None:
     """Register payment handlers with dispatcher.
 
@@ -345,6 +470,11 @@ def register_payment_handlers(dp: Dispatcher) -> None:
     dp.callback_query.register(
         handle_payment_method_selection,
         F.data.startswith("payment_method:"),
+    )
+
+    dp.callback_query.register(
+        handle_payment_balance_selection,
+        F.data.startswith("payment_balance:"),
     )
 
     dp.callback_query.register(

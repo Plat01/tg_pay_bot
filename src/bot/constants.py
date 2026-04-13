@@ -52,6 +52,7 @@ class CallbackData:
     # Payment confirmation
     CONFIRM_PAYMENT = "confirm_payment"  # Format: confirm_payment:{payment_id}
     PAYMENT_METHOD_SELECT = "payment_method"  # Format: payment_method:{tariff_type}
+    PAYMENT_BALANCE = "payment_balance"  # Format: payment_balance:{tariff_type}
 
     # Admin
     SEND_SUBSCRIPTION_LINKS = "send_subscription_links"

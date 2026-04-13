@@ -392,17 +392,23 @@ class PaymentService:
             datetime.now(timezone.utc),
         )
 
-        # Process referral earnings
-        try:
-            await self.referral_service.process_referral_earning(payment)
+        # Process referral earnings only for external payments (not balance)
+        if payment.payment_provider != "balance":
+            try:
+                await self.referral_service.process_referral_earning(payment)
+                logger.info(
+                    f"Referral earnings processed",
+                    extra={"payment_id": payment.id},
+                )
+            except Exception as e:
+                # Log error but don't fail the payment completion
+                logger.error(
+                    f"Failed to process referral earnings: {e}",
+                    extra={"payment_id": payment.id},
+                )
+        else:
             logger.info(
-                f"Referral earnings processed",
-                extra={"payment_id": payment.id},
-            )
-        except Exception as e:
-            # Log error but don't fail the payment completion
-            logger.error(
-                f"Failed to process referral earnings: {e}",
+                f"Skipping referral earnings for balance payment",
                 extra={"payment_id": payment.id},
             )
 

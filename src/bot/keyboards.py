@@ -34,6 +34,7 @@ class Keyboards:
             ],
             [
                 InlineKeyboardButton(text="💳 Оплатить", callback_data=CallbackData.PAY),
+                InlineKeyboardButton(text="💰 Баланс", callback_data=CallbackData.BALANCE),
             ],
             [
                 InlineKeyboardButton(text="🛠️ Поддержка", callback_data=CallbackData.SUPPORT),
@@ -189,9 +190,10 @@ class Keyboards:
             inline_keyboard=[
                 [InlineKeyboardButton(text="➕ Пополнить", callback_data=CallbackData.DEPOSIT)],
                 [
+                    InlineKeyboardButton(text="🛠️ Поддержка", callback_data=CallbackData.SUPPORT),
                     InlineKeyboardButton(
                         text="📋 История", callback_data=CallbackData.DEPOSIT_HISTORY
-                    )
+                    ),
                 ],
                 [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
             ]
@@ -313,6 +315,12 @@ class Keyboards:
         buttons = [
             [
                 InlineKeyboardButton(
+                    text="💰 Баланс",
+                    callback_data=f"payment_balance:{tariff_type}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="💳 СБП QR-код",
                     callback_data=f"payment_method:{PlategaPaymentMethod.SBP_QR}:{tariff_type}",
                 )
@@ -415,6 +423,20 @@ class Keyboards:
         )
 
         return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    @staticmethod
+    def balance_insufficient() -> InlineKeyboardMarkup:
+        """Balance insufficient keyboard with deposit button."""
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="➕ Пополнить баланс", callback_data=CallbackData.DEPOSIT
+                    )
+                ],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.BUY_SUBSCRIPTION)],
+            ]
+        )
 
     @staticmethod
     def subscription_links(subscriptions: list) -> InlineKeyboardMarkup:

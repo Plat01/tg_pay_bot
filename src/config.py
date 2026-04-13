@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     db_password: str = "postgres"
 
     # Referral System
-    referral_bonus_percent: Decimal = Decimal("10.00")
+    referral_bonus_percent: Decimal = Decimal("20.00")
     referral_code_length: int = 8
 
     # Application

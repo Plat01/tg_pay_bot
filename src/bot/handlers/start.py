@@ -349,25 +349,21 @@ async def handle_balance_callback(callback: CallbackQuery) -> None:
             await callback.answer()
             return
 
+        example_bonus = int(1000 * settings.referral_bonus_percent / 100)
+
         balance_text = Texts.BALANCE_INFO.format(
             balance=user.balance,
             referral_code=user.referral_code,
+            referral_percent=settings.referral_bonus_percent,
+            example_bonus=example_bonus,
         )
 
-        # Send balance info with deposit amount buttons
         await callback.message.edit_text(
             balance_text,
             parse_mode="HTML",
             reply_markup=Keyboards.balance_actions(),
         )
         await callback.answer()
-
-        # Send deposit prompt with amount buttons
-        await callback.message.answer(
-            Texts.BALANCE_DEPOSIT_PROMPT,
-            parse_mode="HTML",
-            reply_markup=Keyboards.balance_deposit_amounts(),
-        )
 
 
 async def handle_deposit_callback(callback: CallbackQuery) -> None:
