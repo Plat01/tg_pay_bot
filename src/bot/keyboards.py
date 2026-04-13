@@ -330,18 +330,6 @@ class Keyboards:
                 )
             ],
             [
-                InlineKeyboardButton(
-                    text="₿ Криптовалюта",
-                    callback_data=f"payment_method:{PlategaPaymentMethod.CRYPTO}:{tariff_type}",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🇧🇾 ЕРИП (Беларусь)",
-                    callback_data=f"payment_method:{PlategaPaymentMethod.ERIP}:{tariff_type}",
-                )
-            ],
-            [
                 InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.BUY_SUBSCRIPTION),
             ],
         ]

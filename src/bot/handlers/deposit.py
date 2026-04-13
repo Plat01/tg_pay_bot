@@ -62,12 +62,6 @@ def get_payment_method_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="₿ Криптовалюта",
-                callback_data=f"method:{PlategaPaymentMethod.CRYPTO}",
-            )
-        ],
-        [
-            InlineKeyboardButton(
                 text="❌ Отмена",
                 callback_data="method:cancel",
             )
@@ -102,7 +96,7 @@ async def cmd_deposit(message: Message, state: FSMContext) -> None:
     """Handle /deposit command - start deposit flow.
 
     Supports optional amount argument: /deposit <amount>
-    
+
     Args:
         message: Telegram message.
         state: FSM state context.
@@ -117,25 +111,25 @@ async def cmd_deposit(message: Message, state: FSMContext) -> None:
         try:
             amount_str = args[1].replace(",", ".").replace(" ", "").replace("₽", "")
             amount = Decimal(amount_str)
-            
+
             # Validate minimum amount
             if amount < MIN_DEPOSIT_AMOUNT:
                 await message.answer(
                     Texts.DEPOSIT_MIN_AMOUNT_ERROR.format(min_amount=MIN_DEPOSIT_AMOUNT),
                 )
                 return
-            
+
             # Store amount and proceed to method selection
             await state.update_data(amount=amount)
             await state.set_state(DepositStates.method)
-            
+
             await message.answer(
                 Texts.DEPOSIT_AMOUNT_SELECTED.format(amount=amount),
                 parse_mode="HTML",
                 reply_markup=get_payment_method_keyboard(),
             )
             return
-            
+
         except InvalidOperation:
             await message.answer(Texts.DEPOSIT_INVALID_FORMAT)
             return
@@ -296,14 +290,10 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
         )
 
         if result.payment_url:
-            message_text += (
-                f"🔗 <b>Для оплаты перейдите по ссылке:</b>\n"
-                f"{result.payment_url}\n\n"
-            )
+            message_text += f"🔗 <b>Для оплаты перейдите по ссылке:</b>\n{result.payment_url}\n\n"
 
         message_text += (
-            f"⏰ После оплаты проверьте статус командой:\n"
-            f"<code>/check_{payment.id}</code>"
+            f"⏰ После оплаты проверьте статус командой:\n<code>/check_{payment.id}</code>"
         )
 
         # Add check status button
@@ -320,7 +310,9 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
                         text="💳 Перейти к оплате",
                         url=result.payment_url,
                     )
-                ] if result.payment_url else [],
+                ]
+                if result.payment_url
+                else [],
             ]
         )
 
