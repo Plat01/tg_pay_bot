@@ -24,19 +24,15 @@ class TariffService:
     Cache is updated only:
     - At bot startup (via initialize_cache())
     - When admin calls /prices command
+
+    Note: This is NOT a singleton. Each instance works with its own session,
+    but all instances share the same class-level cache.
     """
 
-    _instance = None
     _cache: Dict[str, Dict[str, Any]] = {}
 
-    def __new__(cls):
-        """Singleton pattern."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
     def __init__(self, session: AsyncSession):
-        """Initialize service."""
+        """Initialize service with database session."""
         self.product_repository = ProductRepository(session)
 
     @classmethod
