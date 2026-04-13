@@ -1,17 +1,18 @@
 """Background scheduler for periodic tasks."""
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from src.bot.bot import bot
+from src.bot.texts import Texts
 from src.config import settings
 from src.infrastructure.database import async_session_maker
-from src.bot.bot import bot
 from src.models.payment import Payment, PaymentStatus
 from src.services.payment import PaymentService
-from src.bot.texts import Texts
+from src.services.subscription import SubscriptionService
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +30,10 @@ async def check_pending_payments_job() -> None:
     - Payments newer than expiry_timeout_hours → check status with provider
     """
     expiry_timeout_hours = getattr(settings, "payment_expiry_timeout_hours", 1)
-    threshold = datetime.now(timezone.utc) - timedelta(hours=expiry_timeout_hours)
+    threshold = datetime.now(UTC) - timedelta(hours=expiry_timeout_hours)
 
     logger.info(
-        f"Checking PENDING payments",
+        "Checking PENDING payments",
         extra={
             "threshold": threshold.isoformat(),
             "expiry_timeout_hours": expiry_timeout_hours,
@@ -107,7 +108,7 @@ async def mark_payment_as_expired(
         payment: Payment to mark as expired
     """
     logger.info(
-        f"Marking payment as expired",
+        "Marking payment as expired",
         extra={
             "payment_id": str(payment.id),
             "created_at": payment.created_at.isoformat(),
@@ -120,7 +121,7 @@ async def mark_payment_as_expired(
     )
 
     logger.info(
-        f"Payment marked as expired",
+        "Payment marked as expired",
         extra={
             "payment_id": str(payment.id),
             "status": payment.status.value,
@@ -139,7 +140,7 @@ async def process_active_payment(
         payment: Payment to process
     """
     logger.info(
-        f"Processing active payment",
+        "Processing active payment",
         extra={
             "payment_id": str(payment.id),
             "external_id": payment.external_id,
@@ -152,7 +153,7 @@ async def process_active_payment(
 
     if payment.status == PaymentStatus.COMPLETED:
         logger.info(
-            f"Active payment completed successfully",
+            "Active payment completed successfully",
             extra={
                 "payment_id": str(payment.id),
                 "status": payment.status.value,
@@ -167,7 +168,7 @@ async def process_active_payment(
                 )
 
                 logger.info(
-                    f"Product delivered for active payment",
+                    "Product delivered for active payment",
                     extra={
                         "payment_id": str(payment.id),
                         "delivery_type": delivery_result.get("type"),
@@ -188,7 +189,7 @@ async def process_active_payment(
 
     elif payment.status == PaymentStatus.FAILED:
         logger.warning(
-            f"Active payment failed",
+            "Active payment failed",
             extra={
                 "payment_id": str(payment.id),
                 "status": payment.status.value,
@@ -197,7 +198,7 @@ async def process_active_payment(
 
     elif payment.status == PaymentStatus.CANCELLED:
         logger.warning(
-            f"Active payment cancelled",
+            "Active payment cancelled",
             extra={
                 "payment_id": str(payment.id),
                 "status": payment.status.value,
@@ -207,7 +208,7 @@ async def process_active_payment(
     elif payment.status == PaymentStatus.PENDING:
         # Still pending after check - will be checked again next run
         logger.debug(
-            f"Active payment still pending",
+            "Active payment still pending",
             extra={
                 "payment_id": str(payment.id),
                 "created_at": payment.created_at.isoformat(),
@@ -255,7 +256,7 @@ async def notify_user_payment_completed(
             )
 
         logger.info(
-            f"User notified about auto-completed payment",
+            "User notified about auto-completed payment",
             extra={
                 "telegram_id": telegram_id,
                 "amount": str(amount),
@@ -270,13 +271,89 @@ async def notify_user_payment_completed(
         )
 
 
+async def check_expiring_subscriptions_job() -> None:
+    """Job to check and notify users about expiring subscriptions.
+
+    Called by APScheduler every SUBSCRIPTION_EXPIRY_CHECK_INTERVAL_HOURS.
+    Finds subscriptions expiring within 24 hours and sends notifications.
+    """
+    hours_before = getattr(settings, "subscription_expiry_notify_hours", 24)
+
+    logger.info(
+        f"Checking for subscriptions expiring within {hours_before} hours",
+        extra={"hours_before": hours_before},
+    )
+
+    async with async_session_maker() as session:
+        subscription_service = SubscriptionService(session)
+
+        expiring_subscriptions = await subscription_service.repository.get_expiring_subscriptions(
+            hours_before=hours_before, limit=100
+        )
+
+        if not expiring_subscriptions:
+            logger.debug("No expiring subscriptions found")
+            return
+
+        logger.info(
+            f"Found {len(expiring_subscriptions)} subscriptions expiring within {hours_before}h",
+            extra={"count": len(expiring_subscriptions)},
+        )
+
+        for subscription in expiring_subscriptions:
+            try:
+                user = subscription.user
+                if not user or not user.telegram_id:
+                    logger.warning(
+                        f"Subscription {subscription.id} has no user or telegram_id",
+                        extra={"subscription_id": str(subscription.id)},
+                    )
+                    continue
+
+                product = subscription.product
+                subscription_type = product.subscription_type if product else "unknown"
+
+                await bot.send_message(
+                    user.telegram_id,
+                    Texts.SUBSCRIPTION_EXPIRING.format(
+                        end_date=subscription.end_date.strftime("%d.%m.%Y %H:%M"),
+                        subscription_type=subscription_type,
+                    ),
+                    parse_mode="HTML",
+                )
+
+                logger.info(
+                    "Sent expiry notification to user",
+                    extra={
+                        "user_id": str(user.id),
+                        "telegram_id": user.telegram_id,
+                        "subscription_id": str(subscription.id),
+                        "end_date": subscription.end_date.isoformat(),
+                    },
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to send expiry notification: {e}",
+                    extra={
+                        "subscription_id": str(subscription.id),
+                        "user_id": str(subscription.user_id) if subscription.user_id else None,
+                    },
+                    exc_info=True,
+                )
+
+
 def setup_scheduler() -> None:
     """Setup APScheduler with payment checker job."""
     check_interval_minutes = getattr(settings, "payment_check_interval_minutes", 5)
+    expiry_check_interval_hours = getattr(settings, "subscription_expiry_check_interval_hours", 1)
 
     logger.info(
-        f"Setting up scheduler",
-        extra={"check_interval_minutes": check_interval_minutes},
+        "Setting up scheduler",
+        extra={
+            "check_interval_minutes": check_interval_minutes,
+            "expiry_check_interval_hours": expiry_check_interval_hours,
+        },
     )
 
     scheduler.add_job(
@@ -289,6 +366,19 @@ def setup_scheduler() -> None:
     )
 
     logger.info(f"Payment checker job scheduled every {check_interval_minutes} minutes")
+
+    scheduler.add_job(
+        check_expiring_subscriptions_job,
+        trigger=IntervalTrigger(hours=expiry_check_interval_hours),
+        id="subscription_expiry_checker",
+        name="Check expiring subscriptions",
+        max_instances=1,
+        replace_existing=True,
+    )
+
+    logger.info(
+        f"Subscription expiry checker job scheduled every {expiry_check_interval_hours} hours"
+    )
 
 
 def start_scheduler() -> None:

@@ -9,7 +9,7 @@ from aiogram.types import Message
 from src.config import settings
 from src.bot.constants import Commands
 from src.infrastructure.database import async_session_maker
-from src.infrastructure.database.repositories import ProductRepository
+from src.infrastructure.database.repositories import ProductRepository, UserRepository
 from src.models.product import SubscriptionType
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,13 @@ class SubscriptionLinkStates(StatesGroup):
     waiting_for_monthly_link = State()
     waiting_for_quarterly_link = State()
     waiting_for_yearly_link = State()
+
+
+class BroadcastStates(StatesGroup):
+    """States for broadcast message collection."""
+
+    waiting_for_all_message = State()
+    waiting_for_paid_message = State()
 
 
 async def cmd_send_subscription_links(message: Message, state: FSMContext) -> None:
@@ -275,8 +282,142 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
     ]:
         await state.clear()
         await message.answer("❌ Процесс ввода ссылок отменен.")
+    elif current_state in [
+        BroadcastStates.waiting_for_all_message,
+        BroadcastStates.waiting_for_paid_message,
+    ]:
+        await state.clear()
+        await message.answer("❌ Процесс рассылки отменен.")
     else:
         await message.answer("❌ Команда /cancel не применима в текущем состоянии.")
+
+
+async def cmd_all_message(message: Message, state: FSMContext) -> None:
+    """Admin command to send message to all users."""
+    if not message.from_user:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    user_id = str(message.from_user.id)
+    if user_id not in settings.admin_id_list:
+        logger.warning(f"Non-admin user {user_id} tried to access broadcast command")
+        await message.answer("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    await state.set_state(BroadcastStates.waiting_for_all_message)
+    await message.answer(
+        "📢 <b>Рассылка всем пользователям</b>\n\n"
+        "Введите сообщение, которое будет отправлено всем пользователям:\n"
+        "Для отмены введите /cancel"
+    )
+    logger.info(f"Admin {user_id} started broadcast to all users")
+
+
+async def cmd_paid_message(message: Message, state: FSMContext) -> None:
+    """Admin command to send message to users with paid subscription."""
+    if not message.from_user:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    user_id = str(message.from_user.id)
+    if user_id not in settings.admin_id_list:
+        logger.warning(f"Non-admin user {user_id} tried to access paid broadcast command")
+        await message.answer("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    await state.set_state(BroadcastStates.waiting_for_paid_message)
+    await message.answer(
+        "📢 <b>Рассылка пользователям с платной подпиской</b>\n\n"
+        "Введите сообщение, которое будет отправлено пользователям с активной платной подпиской:\n"
+        "Для отмены введите /cancel"
+    )
+    logger.info(f"Admin {user_id} started broadcast to paid users")
+
+
+async def process_all_message(message: Message, state: FSMContext) -> None:
+    """Process and send broadcast message to all users."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте сообщение текстом.")
+        return
+
+    if not message.bot:
+        await message.answer("❌ Ошибка доступа к боту.")
+        return
+
+    broadcast_text = message.text.strip()
+    sent_count = 0
+    error_count = 0
+
+    try:
+        async with async_session_maker() as session:
+            user_repository = UserRepository(session)
+            users = await user_repository.get_all_users()
+
+            await message.answer(f"📤 Начинаю рассылку {len(users)} пользователям...")
+
+            for user in users:
+                try:
+                    await message.bot.send_message(
+                        chat_id=user.telegram_id, text=broadcast_text, parse_mode="HTML"
+                    )
+                    sent_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to send message to user {user.telegram_id}: {e}")
+                    error_count += 1
+
+        await message.answer(
+            f"✅ Рассылка завершена!\n📤 Отправлено: {sent_count}\n❌ Ошибок: {error_count}"
+        )
+
+    except Exception as e:
+        logger.error(f"Error during broadcast: {e}")
+        await message.answer(f"❌ Произошла ошибка при рассылке: {e}")
+    finally:
+        await state.clear()
+
+
+async def process_paid_message(message: Message, state: FSMContext) -> None:
+    """Process and send broadcast message to users with paid subscription."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте сообщение текстом.")
+        return
+
+    if not message.bot:
+        await message.answer("❌ Ошибка доступа к боту.")
+        return
+
+    broadcast_text = message.text.strip()
+    sent_count = 0
+    error_count = 0
+
+    try:
+        async with async_session_maker() as session:
+            user_repository = UserRepository(session)
+            users = await user_repository.get_users_with_active_subscription()
+
+            await message.answer(
+                f"📤 Начинаю рассылку {len(users)} пользователям с платной подпиской..."
+            )
+
+            for user in users:
+                try:
+                    await message.bot.send_message(
+                        chat_id=user.telegram_id, text=broadcast_text, parse_mode="HTML"
+                    )
+                    sent_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to send message to user {user.telegram_id}: {e}")
+                    error_count += 1
+
+        await message.answer(
+            f"✅ Рассылка завершена!\n📤 Отправлено: {sent_count}\n❌ Ошибок: {error_count}"
+        )
+
+    except Exception as e:
+        logger.error(f"Error during paid broadcast: {e}")
+        await message.answer(f"❌ Произошла ошибка при рассылке: {e}")
+    finally:
+        await state.clear()
 
 
 def register_admin_handlers(dp: Dispatcher) -> None:
@@ -284,13 +425,21 @@ def register_admin_handlers(dp: Dispatcher) -> None:
     # Command to start the process
     dp.message.register(cmd_send_subscription_links, Command(Commands.SEND_SUBSCRIPTION_LINKS))
 
+    # Broadcast commands (only for admins)
+    dp.message.register(cmd_all_message, Command(Commands.ALL_MESSAGE))
+    dp.message.register(cmd_paid_message, Command(Commands.PAID_MESSAGE))
+
     # Cancel command for all states (only for admins)
     dp.message.register(cmd_cancel, Command("cancel"))
 
-    # Handlers for each state
+    # Handlers for subscription link states
     dp.message.register(process_trial_link, SubscriptionLinkStates.waiting_for_trial_link)
     dp.message.register(process_monthly_link, SubscriptionLinkStates.waiting_for_monthly_link)
     dp.message.register(process_quarterly_link, SubscriptionLinkStates.waiting_for_quarterly_link)
     dp.message.register(process_yearly_link, SubscriptionLinkStates.waiting_for_yearly_link)
+
+    # Handlers for broadcast states
+    dp.message.register(process_all_message, BroadcastStates.waiting_for_all_message)
+    dp.message.register(process_paid_message, BroadcastStates.waiting_for_paid_message)
 
     logger.info("Admin handlers registered")

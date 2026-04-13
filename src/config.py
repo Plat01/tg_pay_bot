@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     payment_check_interval_minutes: int = 5  # Check every 5 minutes
     payment_expiry_timeout_hours: int = 1  # Mark as expired after 1 hour
 
+    # Subscription Expiry Notification Settings
+    subscription_expiry_check_interval_hours: int = 1  # Check every hour
+    subscription_expiry_notify_hours: int = 24  # Notify 24 hours before expiry
+
     @field_validator("debug", mode="before")
     @classmethod
     def validate_debug(cls, v: str | bool) -> bool:

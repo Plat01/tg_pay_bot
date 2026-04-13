@@ -1,8 +1,9 @@
 """Subscription repository for database operations."""
 
-from datetime import datetime, timezone
 import uuid
-from sqlalchemy import select, desc
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,7 +25,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             .options(selectinload(Subscription.product))
             .where(Subscription.user_id == user_id)
             .where(Subscription.is_active == True)
-            .where(Subscription.end_date > datetime.now(timezone.utc))
+            .where(Subscription.end_date > datetime.now(UTC))
             .order_by(desc(Subscription.end_date))
         )
         result = await self.session.execute(statement)
@@ -74,3 +75,30 @@ class SubscriptionRepository(BaseRepository[Subscription]):
     async def deactivate_subscription(self, subscription: Subscription) -> Subscription:
         """Deactivate a subscription."""
         return await self.update(subscription, {"is_active": False})
+
+    async def get_expiring_subscriptions(
+        self, hours_before: int = 24, limit: int = 100
+    ) -> list[Subscription]:
+        """Get active subscriptions expiring within specified hours.
+
+        Args:
+            hours_before: Number of hours to look ahead for expiring subscriptions.
+            limit: Maximum number of subscriptions to return.
+
+        Returns:
+            List of active subscriptions expiring within the specified hours.
+        """
+        now = datetime.now(UTC)
+        threshold = now + timedelta(hours=hours_before)
+
+        statement = (
+            select(Subscription)
+            .options(selectinload(Subscription.product), selectinload(Subscription.user))
+            .where(Subscription.is_active == True)
+            .where(Subscription.end_date > now)
+            .where(Subscription.end_date <= threshold)
+            .order_by(Subscription.end_date)
+            .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())

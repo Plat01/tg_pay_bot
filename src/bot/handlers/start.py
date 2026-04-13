@@ -52,23 +52,24 @@ async def cmd_start(message: Message) -> None:
         subscriptions = await subscription_service.get_active_subscriptions(db_user.id)
         if subscriptions:
             subscription_status_list = []
-            for sub in subscriptions:
+            for i, sub in enumerate(subscriptions, 1):
                 product = getattr(sub, "product", None)
+                sub_info = subscription_service.get_subscription_info(sub)
                 sub_type = product.subscription_type if product else "unknown"
-                end_date = sub.end_date.strftime("%d.%m.%Y")
-                subscription_status_list.append(f"  • {sub_type} — до {end_date}")
+                end_date_str = sub.end_date.strftime("%d.%m.%Y %H:%M")
+                time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
+                subscription_status_list.append(
+                    f"{i}. {sub_type} — до {end_date_str} ({time_left_str})"
+                )
             subscription_status = "\n".join(subscription_status_list)
             show_trial_button = False
         else:
             subscription_status = "❌ Не активна"
             show_trial_button = db_user.is_new
 
-        subscription_end = "—" if not subscriptions else ""
-
         await message.answer(
             Texts.START_WELCOME.format(
                 subscription_status=subscription_status,
-                subscription_end=subscription_end,
             ),
             parse_mode="HTML",
             reply_markup=Keyboards.main_menu(show_trial_button=show_trial_button),
@@ -96,23 +97,24 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
         subscriptions = await subscription_service.get_active_subscriptions(db_user.id)
         if subscriptions:
             subscription_status_list = []
-            for sub in subscriptions:
+            for i, sub in enumerate(subscriptions, 1):
                 product = getattr(sub, "product", None)
+                sub_info = subscription_service.get_subscription_info(sub)
                 sub_type = product.subscription_type if product else "unknown"
-                end_date = sub.end_date.strftime("%d.%m.%Y")
-                subscription_status_list.append(f"  • {sub_type} — до {end_date}")
+                end_date_str = sub.end_date.strftime("%d.%m.%Y %H:%M")
+                time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
+                subscription_status_list.append(
+                    f"{i}. {sub_type} — до {end_date_str} ({time_left_str})"
+                )
             subscription_status = "\n".join(subscription_status_list)
             show_trial_button = False
         else:
             subscription_status = "❌ Не активна"
             show_trial_button = db_user.is_new
 
-        subscription_end = "—" if not subscriptions else ""
-
         await callback.message.edit_text(
             Texts.START_MAIN_MENU.format(
                 subscription_status=subscription_status,
-                subscription_end=subscription_end,
             ),
             parse_mode="HTML",
             reply_markup=Keyboards.main_menu(show_trial_button=show_trial_button),

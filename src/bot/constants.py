@@ -74,6 +74,8 @@ class Commands:
     DEPOSIT = "deposit"
     REFERRAL = "referral"
     SEND_SUBSCRIPTION_LINKS = "send_sub_links"
+    ALL_MESSAGE = "all_message"
+    PAID_MESSAGE = "pay_message"
 
 
 class Limits:
