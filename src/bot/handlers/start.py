@@ -194,8 +194,25 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
 
 async def handle_pay_callback(callback: CallbackQuery) -> None:
     """Handle 💳 Оплатить button from main menu."""
+    async with async_session_maker() as session:
+        tariff_service = TariffService(session)
+        tariffs = await tariff_service.get_all_tariffs()
+
+    monthly_price = int(tariffs.get("monthly", {}).get("price", 199))
+    quarterly_price = int(tariffs.get("quarterly", {}).get("price", 499))
+    yearly_price = int(tariffs.get("yearly", {}).get("price", 1999))
+
+    pay_text = (
+        "💳 <b>Оплата подписки</b>\n\n"
+        "Выберите тарифный план:\n\n"
+        f"• 1 месяц — {monthly_price} ₽\n"
+        f"• 3 месяца — {quarterly_price} ₽\n"
+        f"• 12 месяцев — {yearly_price} ₽\n\n"
+        "Для покупки выберите тариф."
+    )
+
     await callback.message.edit_text(
-        Texts.PAY_TEXT,
+        pay_text,
         parse_mode="HTML",
         reply_markup=await Keyboards.buy_subscription(),
     )
@@ -446,8 +463,25 @@ async def handle_trial_subscription_callback(callback: CallbackQuery) -> None:
 
 async def handle_buy_subscription_callback(callback: CallbackQuery) -> None:
     """Handle 💎 Купить подписку button from main menu."""
+    async with async_session_maker() as session:
+        tariff_service = TariffService(session)
+        tariffs = await tariff_service.get_all_tariffs()
+
+    monthly_price = int(tariffs.get("monthly", {}).get("price", 199))
+    quarterly_price = int(tariffs.get("quarterly", {}).get("price", 499))
+    yearly_price = int(tariffs.get("yearly", {}).get("price", 1999))
+
+    buy_text = (
+        "💎 <b>Купить подписку</b>\n\n"
+        "Выберите тарифный план:\n\n"
+        f"• 1 месяц — {monthly_price} ₽\n"
+        f"• 3 месяца — {quarterly_price} ₽\n"
+        f"• 12 месяцев — {yearly_price} ₽\n\n"
+        "Для покупки выберите тариф."
+    )
+
     await callback.message.edit_text(
-        Texts.BUY_SUBSCRIPTION,
+        buy_text,
         parse_mode="HTML",
         reply_markup=await Keyboards.buy_subscription(),
     )
