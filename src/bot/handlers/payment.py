@@ -19,7 +19,7 @@ from aiogram.types import CallbackQuery
 from src.bot.constants import CallbackData
 from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
-from src.bot.subscription_prices import get_tariff_data
+from src.services.tariff import TariffService
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import UserRepository
@@ -47,7 +47,10 @@ async def handle_tariff_selection(callback: CallbackQuery) -> None:
         await callback.answer("❌ Неверный тариф", show_alert=True)
         return
 
-    tariff_data = get_tariff_data(tariff_type)
+    async with async_session_maker() as session:
+        tariff_service = TariffService(session)
+        tariff_data = await tariff_service.get_tariff_data(tariff_type)
+
     if not tariff_data:
         await callback.answer("❌ Тариф не найден", show_alert=True)
         return
@@ -88,7 +91,10 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
         tariff_type = parts[2]
 
         payment_method = PlategaPaymentMethod(payment_method_code)
-        tariff_data = get_tariff_data(tariff_type)
+
+        async with async_session_maker() as session:
+            tariff_service = TariffService(session)
+            tariff_data = await tariff_service.get_tariff_data(tariff_type)
 
         if not tariff_data:
             await callback.answer("❌ Тариф не найден", show_alert=True)

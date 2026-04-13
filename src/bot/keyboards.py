@@ -7,7 +7,8 @@ import uuid
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.bot.constants import CallbackData
-from src.bot.subscription_prices import SUBSCRIPTION_PRICES, get_tariff_data
+from src.services.tariff import TariffService
+from src.infrastructure.database import async_session_maker
 from src.config import settings
 from src.infrastructure.payments.schemas import PlategaPaymentMethod
 
@@ -265,29 +266,33 @@ class Keyboards:
 
     # Buy subscription tariff selection
     @staticmethod
-    def buy_subscription() -> InlineKeyboardMarkup:
+    async def buy_subscription() -> InlineKeyboardMarkup:
         """Buy subscription tariff selection keyboard."""
-        monthly_data = get_tariff_data("monthly")
-        quarterly_data = get_tariff_data("quarterly")
-        yearly_data = get_tariff_data("yearly")
+        async with async_session_maker() as session:
+            tariff_service = TariffService(session)
+            tariffs = await tariff_service.get_all_tariffs()
+
+        monthly_data = tariffs.get("monthly")
+        quarterly_data = tariffs.get("quarterly")
+        yearly_data = tariffs.get("yearly")
 
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text=monthly_data["label"] if monthly_data else "1 месяц — 50 ₽",
+                        text=monthly_data["label"] if monthly_data else "1 месяц — 199 ₽",
                         callback_data=CallbackData.TARIFF_1_MONTH,
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        text=quarterly_data["label"] if quarterly_data else "3 месяца — 799 ₽",
+                        text=quarterly_data["label"] if quarterly_data else "3 месяца — 499 ₽",
                         callback_data=CallbackData.TARIFF_3_MONTHS,
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        text=yearly_data["label"] if yearly_data else "12 месяцев — 2499 ₽",
+                        text=yearly_data["label"] if yearly_data else "12 месяцев — 1999 ₽",
                         callback_data=CallbackData.TARIFF_12_MONTHS,
                     )
                 ],

@@ -13,6 +13,7 @@ logging.basicConfig(
 from aiogram.enums import ParseMode
 
 from src.bot.bot import bot, dp
+from src.services.tariff import TariffService
 from src.workers.scheduler import start_scheduler, shutdown_scheduler
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,10 @@ async def notify_admins() -> None:
 async def main() -> None:
     """Start the bot."""
     logger.info("Starting bot...")
+
+    # Initialize tariff cache
+    await TariffService.initialize_cache()
+    logger.info("Tariff cache initialized")
 
     start_scheduler()
     logger.info("Scheduler started")

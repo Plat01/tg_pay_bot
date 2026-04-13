@@ -187,7 +187,7 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
             await callback.message.edit_text(
                 profile_text,
                 parse_mode="HTML",
-                reply_markup=Keyboards.buy_subscription(),
+                reply_markup=await Keyboards.buy_subscription(),
             )
         await callback.answer()
 
@@ -197,7 +197,7 @@ async def handle_pay_callback(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         Texts.PAY_TEXT,
         parse_mode="HTML",
-        reply_markup=Keyboards.buy_subscription(),
+        reply_markup=await Keyboards.buy_subscription(),
     )
     await callback.answer()
 
@@ -431,7 +431,7 @@ async def handle_trial_subscription_callback(callback: CallbackQuery) -> None:
             await callback.message.edit_text(
                 Texts.TRIAL_ALREADY_USED,
                 parse_mode="HTML",
-                reply_markup=Keyboards.buy_subscription(),
+                reply_markup=await Keyboards.buy_subscription(),
             )
             await callback.answer()
             return
@@ -449,7 +449,7 @@ async def handle_buy_subscription_callback(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         Texts.BUY_SUBSCRIPTION,
         parse_mode="HTML",
-        reply_markup=Keyboards.buy_subscription(),
+        reply_markup=await Keyboards.buy_subscription(),
     )
     await callback.answer()
 
@@ -479,7 +479,7 @@ async def handle_trial_activate_callback(callback: CallbackQuery) -> None:
             await callback.message.edit_text(
                 Texts.TRIAL_ALREADY_USED,
                 parse_mode="HTML",
-                reply_markup=Keyboards.buy_subscription(),
+                reply_markup=await Keyboards.buy_subscription(),
             )
             await callback.answer()
             return

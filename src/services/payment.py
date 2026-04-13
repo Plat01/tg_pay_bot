@@ -1,33 +1,35 @@
 """Payment service for business logic.
 
-This service orchestrates payment operations, integrating with
-external payment providers and managing the payment lifecycle.
+This module provides business logic for payment operations:
+- Creating payments (external via Platega, internal balance top-ups)
+- Checking payment status via Platega API
+- Completing payments and delivering products (balance or subscriptions)
+- Managing payment records in database
 """
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
+from src.services.tariff import TariffService
 from src.config import settings
 from src.infrastructure.database.repositories import (
     PaymentRepository,
-    UserRepository,
     ProductRepository,
+    UserRepository,
 )
-from src.infrastructure.payments import (
-    PaymentProvider,
-    PaymentProviderFactory,
-    CreatePaymentResult,
-    PlategaPaymentMethod,
-)
-from src.models.payment import Payment, PaymentStatus
-from src.services.referral import ReferralService
+from src.infrastructure.payments import PlategaClient, PlategaPaymentMethod
+from src.infrastructure.payments.schemas import PaymentCreateRequest, PaymentCreateResponse
+from src.models.payment import Payment, PaymentStatus, PaymentType
+from src.models.product import SubscriptionType
+from src.models.user import User
 from src.services.subscription import SubscriptionService
-from src.bot.subscription_prices import get_tariff_by_price
+from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -494,7 +496,8 @@ class PaymentService:
         Raises:
             ValueError: If tariff or product not found
         """
-        tariff_type = get_tariff_by_price(int(payment.amount))
+        tariff_service = TariffService(self.session)
+        tariff_type = await tariff_service.get_tariff_by_price(int(payment.amount))
 
         if not tariff_type:
             raise ValueError(f"Cannot determine tariff for amount {payment.amount}")
