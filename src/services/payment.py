@@ -30,7 +30,7 @@ from src.infrastructure.payments import (
     CreatePaymentResult,
     PlategaPaymentMethod,
 )
-from src.models.payment import Payment, PaymentStatus, PaymentType
+from src.models.payment import Payment, PaymentStatus
 from src.models.product import SubscriptionType
 from src.models.user import User
 from src.services.subscription import SubscriptionService
