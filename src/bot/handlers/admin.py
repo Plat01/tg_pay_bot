@@ -12,7 +12,11 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from src.bot.constants import CallbackData, Commands
 from src.config import settings
 from src.infrastructure.database import async_session_maker
-from src.infrastructure.database.repositories import ProductRepository, UserRepository
+from src.infrastructure.database.repositories import (
+    PaymentRepository,
+    ProductRepository,
+    UserRepository,
+)
 from src.models.product import Product, SubscriptionType
 from src.models.subscription import Subscription
 from src.services.tariff import TariffService
@@ -544,7 +548,6 @@ async def cmd_prices(message: Message) -> None:
     try:
         async with async_session_maker() as session:
             tariff_service = TariffService(session)
-            # Refresh cache from DB
             await tariff_service.refresh_cache()
             tariffs = await tariff_service.get_all_tariffs()
 
@@ -590,6 +593,116 @@ async def cmd_prices(message: Message) -> None:
     except Exception as e:
         logger.error(f"Error showing prices: {e}")
         await message.answer("❌ Произошла ошибка при получении цен.")
+
+
+async def cmd_user_payments(message: Message) -> None:
+    """Admin command to show user payments by telegram ID.
+
+    Usage: /payments <telegram_id>
+    """
+    if not message.from_user:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    admin_id = str(message.from_user.id)
+    if admin_id not in settings.admin_id_list:
+        logger.warning(f"Non-admin user {admin_id} tried to access payments command")
+        await message.answer("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    if not message.text:
+        await message.answer(
+            "❌ Укажите Telegram ID пользователя.\n\nИспользование: /payments <telegram_id>"
+        )
+        return
+
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer(
+            "❌ Укажите Telegram ID пользователя.\n\nИспользование: /payments <telegram_id>"
+        )
+        return
+
+    telegram_id = parts[1].strip()
+
+    try:
+        async with async_session_maker() as session:
+            user_repository = UserRepository(session)
+            payment_repository = PaymentRepository(session)
+
+            user = await user_repository.get_by_telegram_id(telegram_id)
+            if not user:
+                await message.answer(f"❌ Пользователь с Telegram ID {telegram_id} не найден.")
+                return
+
+            payments = await payment_repository.get_user_payments(user.id)
+
+            if not payments:
+                await message.answer(
+                    f"📋 У пользователя {telegram_id} нет платежей.", parse_mode="HTML"
+                )
+                return
+
+            from zoneinfo import ZoneInfo
+
+            msk_tz = ZoneInfo("Europe/Moscow")
+
+            username = f"@{user.username}" if user.username else "Без username"
+            lines = [f"💳 <b>Платежи пользователя {username} (ID: {telegram_id})</b>\n"]
+            lines.append(f"📊 Всего платежей: {len(payments)}\n")
+
+            status_emoji = {
+                "completed": "✅",
+                "paid": "✅",
+                "pending": "⏳",
+                "failed": "❌",
+                "cancelled": "🚫",
+                "expired": "⏰",
+            }
+
+            for payment in payments:
+                status = (
+                    payment.status.value
+                    if hasattr(payment.status, "value")
+                    else str(payment.status)
+                )
+                emoji = status_emoji.get(status, "❓")
+                created_msk = payment.created_at.astimezone(msk_tz)
+                created_str = created_msk.strftime("%d.%m.%Y %H:%M МСК")
+
+                lines.append(f"\n{emoji} <b>{payment.amount:.2f} {payment.currency}</b>")
+                lines.append(f"  Статус: {status}")
+                lines.append(f"  Провайдер: {payment.payment_provider or 'N/A'}")
+                lines.append(f"  Создан: {created_str}")
+                if payment.completed_at:
+                    completed_msk = payment.completed_at.astimezone(msk_tz)
+                    completed_str = completed_msk.strftime("%d.%m.%Y %H:%M МСК")
+                    lines.append(f"  Завершен: {completed_str}")
+
+            full_message = "\n".join(lines)
+            if len(full_message) <= 4096:
+                await message.answer(full_message, parse_mode="HTML")
+            else:
+                chunks = []
+                current_chunk = lines[0] + "\n"
+                for line in lines[1:]:
+                    if len(current_chunk) + len(line) + 1 > 4096:
+                        chunks.append(current_chunk)
+                        current_chunk = line
+                    else:
+                        current_chunk += "\n" + line
+                if current_chunk:
+                    chunks.append(current_chunk)
+
+                for chunk in chunks:
+                    await message.answer(chunk, parse_mode="HTML")
+                    await asyncio.sleep(0.1)
+
+            logger.info(f"Admin {admin_id} viewed payments for user {telegram_id}")
+
+    except Exception as e:
+        logger.error(f"Error showing user payments: {e}")
+        await message.answer(f"❌ Произошла ошибка при получении платежей: {e}")
 
 
 async def handle_edit_price(callback: CallbackQuery, state: FSMContext) -> None:
@@ -729,20 +842,12 @@ async def process_price_edit(message: Message, state: FSMContext) -> None:
 
 def register_admin_handlers(dp: Dispatcher) -> None:
     """Register admin command handlers."""
-    # Command to start the process
     dp.message.register(cmd_send_subscription_links, Command(Commands.SEND_SUBSCRIPTION_LINKS))
-
-    # Prices command
     dp.message.register(cmd_prices, Command(Commands.PRICES))
-
-    # Subscriptions list command
     dp.message.register(cmd_subscriptions, Command(Commands.SUBSCRIPTIONS))
-
-    # Broadcast commands (only for admins)
+    dp.message.register(cmd_user_payments, Command(Commands.USER_PAYMENTS))
     dp.message.register(cmd_all_message, Command(Commands.ALL_MESSAGE))
     dp.message.register(cmd_paid_message, Command(Commands.PAID_MESSAGE))
-
-    # Cancel command for all states (only for admins)
     dp.message.register(cmd_cancel, Command("cancel"))
 
     # Handlers for subscription link states
