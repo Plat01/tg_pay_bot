@@ -386,9 +386,11 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
             # Update payment status to COMPLETED immediately
             payment = await payment_service.complete_payment(payment)
 
-            # Deduct balance
-            new_balance = user.balance - amount
-            await user_service.update_balance(user, new_balance)
+            # Deduct balance (pass negative amount as change)
+            await user_service.update_balance(user, -amount)
+
+            # Get user again to have updated balance after deduction
+            user_updated = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
 
             # Get product
             product = await product_repository.get_product_by_subscription_type(tariff_type)
@@ -415,14 +417,14 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
                     "payment_id": payment.id,
                     "subscription_id": subscription.id,
                     "amount": str(amount),
-                    "new_balance": str(new_balance),
+                    "new_balance": str(user_updated.balance if user_updated else "unknown"),
                 },
             )
 
             await callback.message.edit_text(
                 Texts.PAYMENT_BALANCE_SUCCESS.format(
                     amount=amount,
-                    balance=new_balance,
+                    balance=user_updated.balance if user_updated else Decimal("0"),
                     duration=product.duration_days,
                     vpn_link=product.happ_link,
                 ),
