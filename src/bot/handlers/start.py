@@ -16,6 +16,7 @@ from src.bot.texts import Texts
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.services.subscription import SubscriptionService
+from src.services.tariff import TariffService
 from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
