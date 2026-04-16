@@ -536,7 +536,7 @@ async def handle_trial_activate_callback(callback: CallbackQuery) -> None:
         await callback.message.edit_text(
             Texts.TRIAL_ACTIVATED.format(vpn_link=trial_product.happ_link),
             parse_mode="HTML",
-            reply_markup=Keyboards.back_to_menu(),
+            reply_markup=Keyboards.subscription_success(),
         )
         await callback.answer()
 
@@ -637,7 +637,7 @@ async def handle_get_subscription_link_callback(callback: CallbackQuery) -> None
                 vpn_link=f"<code>{vpn_link}</code>",
             ),
             parse_mode="HTML",
-            reply_markup=Keyboards.back_to_menu(),
+            reply_markup=Keyboards.subscription_success(),
         )
         await callback.answer()
 

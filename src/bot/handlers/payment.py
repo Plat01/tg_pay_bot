@@ -252,7 +252,7 @@ async def handle_confirm_payment(callback: CallbackQuery) -> None:
                                 vpn_link=delivery_result["vpn_link"],
                             ),
                             parse_mode="HTML",
-                            reply_markup=Keyboards.back_to_menu(),
+                            reply_markup=Keyboards.subscription_success(),
                         )
                     elif delivery_result["type"] == "balance":
                         await callback.message.edit_text(
@@ -429,7 +429,7 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
                     vpn_link=product.happ_link,
                 ),
                 parse_mode="HTML",
-                reply_markup=Keyboards.back_to_menu(),
+                reply_markup=Keyboards.subscription_success(),
             )
             await callback.answer()
 

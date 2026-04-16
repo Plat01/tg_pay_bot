@@ -463,7 +463,36 @@ class Keyboards:
                 ]
             )
 
+        # Add instruction button
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="📖 Инструкция по установке",
+                    url="https://telegra.ph/IPhone-04-14-6",
+                )
+            ]
+        )
+
         # Add back button
         buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)])
 
         return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    @staticmethod
+    def subscription_success() -> InlineKeyboardMarkup:
+        """Keyboard after successful subscription purchase.
+
+        Returns:
+            InlineKeyboardMarkup with instruction and back to menu buttons.
+        """
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📖 Инструкция по установке",
+                        url="https://telegra.ph/IPhone-04-14-6",
+                    )
+                ],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
+            ]
+        )
