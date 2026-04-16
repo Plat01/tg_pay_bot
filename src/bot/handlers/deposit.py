@@ -5,7 +5,9 @@ into their account using various payment methods.
 """
 
 import logging
+import uuid
 from decimal import Decimal, InvalidOperation
+from typing import Tuple
 
 from aiogram import Dispatcher, F
 from aiogram.filters import Command
@@ -18,7 +20,7 @@ from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import UserRepository
 from src.infrastructure.payments import PlategaPaymentMethod
-from src.models.payment import PaymentStatus
+from src.models.payment import Payment, PaymentStatus
 from src.services.payment import PaymentService
 
 logger = logging.getLogger(__name__)
@@ -340,98 +342,108 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
         )
 
 
+async def _check_payment_status(
+    payment_id: uuid.UUID, telegram_id: int
+) -> Tuple[Payment, str, str]:
+    """Check payment status and return payment with emoji and text.
+
+    Args:
+        payment_id: Payment UUID.
+        telegram_id: User's Telegram ID.
+
+    Returns:
+        Tuple of (Payment, emoji, status_text).
+
+    Raises:
+        ValueError: If payment not found or doesn't belong to user.
+        Exception: For other errors.
+    """
+    async with async_session_maker() as session:
+        payment_service = PaymentService(session)
+        user_repository = UserRepository(session)
+
+        payment = await payment_service.get_payment_by_id(payment_id)
+
+        if not payment:
+            raise ValueError(f"Платёж #{payment_id} не найден")
+
+        user = await user_repository.get_by_telegram_id(str(telegram_id))
+        if not user or payment.user_id != user.id:
+            raise ValueError("Это не ваш платёж")
+
+        if payment.status == PaymentStatus.PENDING and payment.external_id:
+            payment = await payment_service.check_and_update_status(payment)
+
+    status_emoji = {
+        PaymentStatus.PENDING: "⏳",
+        PaymentStatus.COMPLETED: "✅",
+        PaymentStatus.FAILED: "❌",
+        PaymentStatus.CANCELLED: "🚫",
+    }
+
+    status_text_map = {
+        PaymentStatus.PENDING: "Ожидает оплаты",
+        PaymentStatus.COMPLETED: "Успешно завершён",
+        PaymentStatus.FAILED: "Ошибка",
+        PaymentStatus.CANCELLED: "Отменён",
+    }
+
+    emoji = status_emoji.get(payment.status, "❓")
+    text = status_text_map.get(payment.status, "Неизвестно")
+
+    return payment, emoji, text
+
+
 async def cmd_check_payment(message: Message) -> None:
     """Handle /check_{id} command - check payment status.
 
     Args:
         message: Telegram message.
     """
-    # Parse payment ID from command
     try:
-        # Command format: /check_123 or /check 123
         text = message.text or ""
         if "_" in text:
-            payment_id = int(text.split("_")[1])
+            payment_id_str = text.split("_")[1]
         elif " " in text:
-            payment_id = int(text.split()[1])
+            payment_id_str = text.split()[1]
         else:
-            await message.answer("❌ Укажите ID платежа: /check_123")
+            await message.answer("❌ Укажите ID платежа: /check_<uuid>")
             return
+
+        payment_id = uuid.UUID(payment_id_str)
     except (ValueError, IndexError):
-        await message.answer("❌ Неверный формат. Используйте: /check_123")
+        await message.answer("❌ Неверный формат. Используйте: /check_<uuid>")
         return
 
-    # Get payment and check status
     try:
-        async with async_session_maker() as session:
-            payment_service = PaymentService(session)
-            user_repository = UserRepository(session)
-
-            # Get payment from database
-            payment = await payment_service.get_payment_by_id(payment_id)
-
-            if not payment:
-                await message.answer(f"❌ Платёж #{payment_id} не найден")
-                return
-
-            # Check if user owns this payment
-            # Get user's UUID from telegram_id for comparison
-            user = await user_repository.get_by_telegram_id(str(message.from_user.id))
-            if not user or payment.user_id != user.id:
-                await message.answer("❌ Это не ваш платёж")
-                return
-
-            # Check status from provider if payment is pending
-            if payment.status == PaymentStatus.PENDING and payment.external_id:
-                payment = await payment_service.check_and_update_status(payment)
-
-        # Build status message
-        status_emoji = {
-            PaymentStatus.PENDING: "⏳",
-            PaymentStatus.COMPLETED: "✅",
-            PaymentStatus.FAILED: "❌",
-            PaymentStatus.CANCELLED: "🚫",
-        }
-
-        status_text = {
-            PaymentStatus.PENDING: "Ожидает оплаты",
-            PaymentStatus.COMPLETED: "Успешно завершён",
-            PaymentStatus.FAILED: "Ошибка",
-            PaymentStatus.CANCELLED: "Отменён",
-        }
-
-        emoji = status_emoji.get(payment.status, "❓")
-        text = status_text.get(payment.status, "Неизвестно")
+        payment, emoji, status_text = await _check_payment_status(payment_id, message.from_user.id)
 
         await message.answer(
             f"{emoji} <b>Статус платежа #{payment.id}</b>\n\n"
             f"💰 Сумма: {payment.amount} {payment.currency}\n"
-            f"📋 Статус: {text}\n"
+            f"📋 Статус: {status_text}\n"
             f"📅 Создан: {payment.created_at.strftime('%d.%m.%Y %H:%M')}\n",
             parse_mode="HTML",
         )
 
         logger.info(
-            f"User checked payment status",
+            "User checked payment status",
             extra={
                 "user_id": message.from_user.id,
-                "payment_id": payment_id,
+                "payment_id": str(payment_id),
                 "status": payment.status.value,
             },
         )
 
+    except ValueError as e:
+        await message.answer(f"❌ {str(e)}")
     except Exception as e:
         logger.error(
             f"Failed to check payment: {e}",
-            extra={
-                "user_id": message.from_user.id,
-                "payment_id": payment_id,
-            },
+            extra={"user_id": message.from_user.id, "payment_id": str(payment_id)},
         )
         await message.answer(
-            f"❌ Ошибка проверки статуса\n\n"
-            f"Попробуйте позже.\n"
-            f"Техническая информация: {str(e)[:100]}"
+            f"❌ Ошибка проверки статуса\n\nПопробуйте позже.\nТехническая информация: {str(e)[:100]}"
         )
 
 
@@ -441,66 +453,28 @@ async def check_payment_callback(callback: CallbackQuery) -> None:
     Args:
         callback: Telegram callback query.
     """
-    # Parse payment ID from callback data
     try:
-        payment_id = int(callback.data.split(":")[1])
+        payment_id_str = callback.data.split(":")[1]
+        payment_id = uuid.UUID(payment_id_str)
     except (ValueError, IndexError):
-        await callback.answer("❌ Ошибка: неверный ID")
+        await callback.answer("❌ Неверный ID платежа", show_alert=True)
         return
 
-    # Get payment and check status
     try:
-        async with async_session_maker() as session:
-            payment_service = PaymentService(session)
-            user_repository = UserRepository(session)
+        payment, emoji, status_text = await _check_payment_status(payment_id, callback.from_user.id)
 
-            payment = await payment_service.get_payment_by_id(payment_id)
-
-            if not payment:
-                await callback.message.edit_text(f"❌ Платёж #{payment_id} не найден")
-                await callback.answer()
-                return
-
-            # Check if user owns this payment
-            user = await user_repository.get_by_telegram_id(str(callback.from_user.id))
-            if not user or payment.user_id != user.id:
-                await callback.answer("❌ Это не ваш платёж", show_alert=True)
-                return
-
-            # Check status from provider if pending
-            if payment.status == PaymentStatus.PENDING and payment.external_id:
-                payment = await payment_service.check_and_update_status(payment)
-
-        # Build status message
-        status_emoji = {
-            PaymentStatus.PENDING: "⏳",
-            PaymentStatus.COMPLETED: "✅",
-            PaymentStatus.FAILED: "❌",
-            PaymentStatus.CANCELLED: "🚫",
-        }
-
-        status_text = {
-            PaymentStatus.PENDING: "Ожидает оплаты",
-            PaymentStatus.COMPLETED: "Успешно завершён",
-            PaymentStatus.FAILED: "Ошибка",
-            PaymentStatus.CANCELLED: "Отменён",
-        }
-
-        emoji = status_emoji.get(payment.status, "❓")
-        text = status_text.get(payment.status, "Неизвестно")
-
-        # Update message
         await callback.message.edit_text(
             f"{emoji} <b>Статус платежа #{payment.id}</b>\n\n"
             f"💰 Сумма: {payment.amount} {payment.currency}\n"
-            f"📋 Статус: {text}\n"
+            f"📋 Статус: {status_text}\n"
             f"📅 Создан: {payment.created_at.strftime('%d.%m.%Y %H:%M')}\n",
             parse_mode="HTML",
             reply_markup=None,
         )
+        await callback.answer(f"Статус: {status_text}")
 
-        await callback.answer(f"Статус: {text}")
-
+    except ValueError as e:
+        await callback.answer(f"❌ {str(e)}", show_alert=True)
     except Exception as e:
         logger.error(f"Failed to check payment: {e}")
         await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
