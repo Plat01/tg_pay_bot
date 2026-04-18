@@ -44,24 +44,25 @@ docker-compose up -d
 docker-compose logs -f app
 ```
 
-### 3. Локальная разработка
+### 3. Перезапуск бота при изменениях
+
+При изменении кода или .env файла:
 
 ```bash
-# Установить UV
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Перезапуск контейнера приложения
+docker compose restart app
 
-# Создать виртуальное окружение и установить зависимости
-uv venv
-source .venv/bin/activate
-uv pip install -e .
+# Полная пересборка и перезапуск (если изменен Dockerfile или зависимости)
+docker compose up -d --build app
 
-# Запустить БД
-docker-compose up -d db
+# Перезапуск всех сервисов
+docker-compose restart
+```
 
-# Запустить миграции
-alembic upgrade head
+При локальной разработке бот перезапускается автоматически при изменении файлов (если используется `--reload`), либо вручную:
 
-# Запустить бота
+```bash
+# Остановить бота (Ctrl+C) и запустить заново
 python -m src.main
 ```
 
@@ -78,27 +79,55 @@ alembic upgrade head
 alembic downgrade -1
 ```
 
+## Подключение к БД через SSH туннель
+
+Для подключения к удаленной БД через SSH туннель:
+
+```bash
+# Создать SSH туннель (пример)
+ssh -L 5433:localhost:5432 user@remote-server.com -N
+
+# Подключиться к БД через туннель
+psql -h localhost -p 5433 -U postgres -d tg_pay_bot
+```
+
+Опции SSH:
+- `-L local_port:remote_host:remote_port` - проброс портов
+- `-N` - не открывать shell сессию
+- `-f` - запуск в фоне (опционально)
+
+Для постоянного туннеля можно использовать `autossh` или systemd сервис.
+
 ## Структура проекта
 
 ```
 src/
-├── bot/               # Инициализация бота
-├── handlers/          # Обработчики команд
-│   ├── start.py       # /start команда
-│   ├── deposit.py     # /deposit - пополнение баланса
-│   └── webhook.py     # Webhook для платежей
-├── models/            # Модели БД (SQLModel)
-├── repositories/      # Слой доступа к данным
-├── services/          # Бизнес-логика
-├── infrastructure/    # Внешние интеграции
-│   └── payments/      # Платежные провайдеры
-│       ├── base.py    # Абстрактный интерфейс
-│       ├── platega.py # Platega.io провайдер
-│       ├── factory.py # Фабрика провайдеров
-│       └── ...
-├── db/                # Сессии и подключения
-├── config.py          # Конфигурация
-└── main.py            # Точка входа
+├── bot/                      # Telegram бот
+│   ├── handlers/             # Обработчики команд и сообщений
+│   │   ├── payment.py        # Обработчики оплаты подписки
+│   │   ├── start.py          # Обработчики start и главного меню
+│   │   ├── deposit.py        # Обработчики пополнения баланса
+│   │   └── admin.py          # Административные обработчики
+│   ├── bot.py                # Инициализация бота и диспетчера
+│   ├── keyboards.py          # Клавиатуры (inline/reply)
+│   ├── texts.py              # Тексты сообщений
+│   ├── constants.py          # Константы бота
+│   └── subscription_prices.py # Цены и длительность тарифов
+├── infrastructure/           # Инфраструктурный слой
+│   ├── database/             # Работа с БД
+│   │   ├── repositories/      # Репозитории для доступа к данным
+│   │   └── session.py         # Сессии БД
+│   └── payments/              # Интеграции с платежными системами
+│       ├── base.py            # Базовый класс платежной системы
+│       ├── platega.py         # Интеграция с Platega
+│       ├── factory.py         # Фабрика платежных систем
+│       ├── schemas.py         # Pydantic схемы для платежей
+│       └── exceptions.py      # Исключения платежных систем
+├── models/                   # SQLModel модели (User, Payment, Subscription, etc.)
+├── services/                 # Бизнес-логика (payment, user, subscription, referral)
+├── workers/                  # Фоновые задачи (scheduler)
+├── config.py                 # Конфигурация через pydantic-settings
+└── main.py                   # Точка входа
 ```
 
 ## Модели данных
@@ -115,6 +144,19 @@ src/
 - payment_provider, external_id
 - payment_metadata - дополнительные данные
 
+### Subscription (Подписка)
+- user_id - ID пользователя
+- product_id - ID продукта
+- is_active - активна ли подписка
+- start_date, end_date - период действия
+
+### Product (Продукт)
+- subscription_type - тип подписки (trial, monthly, quarterly, yearly)
+- price - цена
+- duration_days - длительность в днях
+- device_limit - лимит устройств
+- happ_link - ссылка для подключения
+
 ### ReferralEarning (Реферальное начисление)
 - referrer_id, referral_id, payment_id
 - amount, percent
@@ -125,18 +167,27 @@ src/
 | Переменная | Описание | Обязательно |
 |------------|----------|-------------|
 | BOT_TOKEN | Токен Telegram бота | Да |
-| DB_HOST | Хост БД | Нет (localhost) |
+| BOT_LINK | Ссылка на бота (https://t.me/botname) | Да |
+| BOT_NAME | Имя бота | Да |
+| SUPPORT_LINK | Ссылка на поддержку | Нет |
+| PRIVACY_POLICY_LINK | Ссылка на политику конфиденциальности | Нет |
+| USER_AGREEMENT_LINK | Ссылка на пользовательское соглашение | Нет |
+| DB_HOST | Хост БД | Нет (db в Docker) |
 | DB_PORT | Порт БД | Нет (5432) |
 | DB_NAME | Имя БД | Нет (tg_pay_bot) |
 | DB_USER | Пользователь БД | Нет (postgres) |
 | DB_PASSWORD | Пароль БД | Нет (postgres) |
 | REFERRAL_BONUS_PERCENT | Процент от платежа реферала | Нет (10) |
+| REFERRAL_CODE_LENGTH | Длина реферального кода | Нет (8) |
+| ADMIN_IDS | ID администраторов через запятую | Нет |
 | DEBUG | Режим отладки | Нет (false) |
-| PLATEGA_API_KEY | API ключ Platega | Для платежей |
-| PLATEGA_SHOP_ID | ID магазина Platega | Для платежей |
-| PLATEGA_WEBHOOK_SECRET | Секрет для webhook | Для платежей |
+| PROXY_URL | URL прокси для бота | Нет |
+| DEFAULT_PAYMENT_PROVIDER | Платежный провайдер по умолчанию | Нет (platega) |
+| PLATEGA_MERCHANT_ID | ID мерчанта Platega | Для платежей |
+| PLATEGA_SECRET | API секрет Platega | Для платежей |
 | PLATEGA_API_URL | URL API Platega | Нет |
 | PLATEGA_WEBHOOK_URL | URL для webhook | Для платежей |
+| PLATEGA_WEBHOOK_SECRET | Секрет для webhook | Для платежей |
 
 ## Платежная система
 
