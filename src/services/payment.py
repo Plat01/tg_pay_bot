@@ -70,6 +70,7 @@ class PaymentService:
             session: Database session for repository operations.
             provider_name: Payment provider name (default from settings).
         """
+        self.session = session
         self.repository = PaymentRepository(session)
         self.user_repository = UserRepository(session)
         self.product_repository = ProductRepository(session)
