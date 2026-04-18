@@ -6,7 +6,7 @@ import logging
 from src.config import settings
 
 logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
+    level=logging.DEBUG if settings.debug else logging.ERROR,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
