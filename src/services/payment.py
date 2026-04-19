@@ -232,6 +232,23 @@ class PaymentService:
             **kwargs,
         )
 
+        # Validate external_id before saving
+        if not external_result.external_id or external_result.external_id.strip() == "":
+            logger.error(
+                f"Provider returned empty external_id",
+                extra={
+                    "telegram_id": telegram_id,
+                    "amount": str(amount),
+                    "provider": self.provider_name,
+                    "success": external_result.success,
+                    "error_message": external_result.error_message,
+                },
+            )
+            raise ValueError(
+                "Платеж не создан: провайдер вернул пустый external_id. "
+                "Попробуйте еще раз или выберите другой способ оплаты."
+            )
+
         # Save to database
         payment = await self.create_payment(
             telegram_id=telegram_id,

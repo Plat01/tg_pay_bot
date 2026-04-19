@@ -157,6 +157,23 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
             disable_web_page_preview=True,
         )
 
+    except ValueError as e:
+        # Specific error for empty external_id or validation errors
+        logger.error(
+            f"Payment validation error: {e}",
+            extra={
+                "user_id": callback.from_user.id,
+                "amount": str(amount),
+                "method": payment_method.name,
+            },
+        )
+
+        await callback.message.edit_text(
+            f"❌ <b>Ошибка создания платежа</b>\n\n{str(e)}",
+            parse_mode="HTML",
+            reply_markup=Keyboards.error_with_support_link(),
+        )
+
     except Exception as e:
         logger.error(
             f"Failed to create payment: {e}",
@@ -169,7 +186,7 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
 
         await callback.message.edit_text(
             "❌ <b>Ошибка создания платежа</b>\n\n"
-            "Не удалось создать платеж. Обратитесь в поддержку.",
+            "Не удалось создать платеж. Попробуйте еще раз или обратитесь в поддержку.",
             parse_mode="HTML",
             reply_markup=Keyboards.error_with_support_link(),
         )
