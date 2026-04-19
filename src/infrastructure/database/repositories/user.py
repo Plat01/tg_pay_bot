@@ -1,10 +1,13 @@
 """User repository for database operations."""
 
 import uuid
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database.repositories.base import BaseRepository
+from src.models.subscription import Subscription
 from src.models.user import User
 
 
@@ -49,10 +52,6 @@ class UserRepository(BaseRepository[User]):
 
     async def get_users_with_active_subscription(self) -> list[User]:
         """Get all users with active paid subscription."""
-        from sqlalchemy.distinct import distinct
-        from src.models.subscription import Subscription
-        from datetime import datetime, timezone
-
         statement = (
             select(User)
             .join(Subscription, User.id == Subscription.user_id)
