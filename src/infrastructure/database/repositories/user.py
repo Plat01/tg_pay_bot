@@ -41,7 +41,7 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.execute(statement)
         return list(result.scalars().all())
 
-    async def get_all_users(self, skip: int = 0, limit: int = 1000) -> list[User]:
+    async def get_all_users(self, skip: int = 0, limit: int = 100000) -> list[User]:
         """Get all users with pagination."""
         statement = select(User).offset(skip).limit(limit)
         result = await self.session.execute(statement)
