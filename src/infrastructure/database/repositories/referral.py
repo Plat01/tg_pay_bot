@@ -1,13 +1,14 @@
 """Referral earning repository for database operations."""
 
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.database.repositories.base import BaseRepository
 from src.models.referral import ReferralEarning, ReferralEarningStatus
-from src.repositories.base import BaseRepository
 
 
 class ReferralEarningRepository(BaseRepository[ReferralEarning]):
@@ -19,7 +20,7 @@ class ReferralEarningRepository(BaseRepository[ReferralEarning]):
 
     async def get_referrer_earnings(
         self,
-        referrer_id: int,
+        referrer_id: uuid.UUID,
         status: ReferralEarningStatus | None = None,
         skip: int = 0,
         limit: int = 100,
@@ -32,7 +33,7 @@ class ReferralEarningRepository(BaseRepository[ReferralEarning]):
         result = await self.session.execute(statement)
         return list(result.scalars().all())
 
-    async def get_total_pending_earnings(self, referrer_id: int) -> Decimal:
+    async def get_total_pending_earnings(self, referrer_id: uuid.UUID) -> Decimal:
         """Get total pending earnings for a referrer."""
         statement = select(ReferralEarning).where(
             ReferralEarning.referrer_id == referrer_id,
@@ -45,7 +46,7 @@ class ReferralEarningRepository(BaseRepository[ReferralEarning]):
     async def mark_as_paid(self, earning: ReferralEarning) -> ReferralEarning:
         """Mark earning as paid."""
         earning.status = ReferralEarningStatus.PAID
-        earning.paid_at = datetime.utcnow()
+        earning.paid_at = datetime.now(timezone.utc)
         await self.session.commit()
         await self.session.refresh(earning)
         return earning

@@ -5,15 +5,16 @@ import logging
 
 from src.config import settings
 
-# Configure logging BEFORE imports that use logging
 logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
+    level=logging.DEBUG if settings.debug else logging.ERROR,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 from aiogram.enums import ParseMode
 
 from src.bot.bot import bot, dp
+from src.services.tariff import TariffService
+from src.workers.scheduler import start_scheduler, shutdown_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +37,19 @@ async def main() -> None:
     """Start the bot."""
     logger.info("Starting bot...")
 
-    # Notify admins about restart
+    # Initialize tariff cache
+    await TariffService.initialize_cache()
+    logger.info("Tariff cache initialized")
+
+    start_scheduler()
+    logger.info("Scheduler started")
+
     await notify_admins()
 
-    # Start polling
     try:
         await dp.start_polling(bot, parse_mode=ParseMode.HTML)
     finally:
+        shutdown_scheduler()
         await bot.session.close()
 
 

@@ -35,9 +35,14 @@ class BaseRepository(Generic[ModelType]):
         return list(result.scalars().all())
 
     async def update(self, instance: ModelType, data: dict) -> ModelType:
-        """Update an existing record."""
+        """Update an existing record.
+        
+        Note: None values are filtered out to prevent violating NOT NULL constraints.
+        """
         for key, value in data.items():
-            setattr(instance, key, value)
+            # Skip None values to avoid setting NULL on NOT NULL columns
+            if value is not None:
+                setattr(instance, key, value)
         await self.session.commit()
         await self.session.refresh(instance)
         return instance

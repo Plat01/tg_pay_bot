@@ -67,6 +67,3 @@ uv.lock
 
 # Alembic
 alembic/versions/*.pyc
-
-# Plans (documentation)
-plans/

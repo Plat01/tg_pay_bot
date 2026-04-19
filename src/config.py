@@ -14,10 +14,18 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # Ignore extra fields from .env (like legacy variables)
     )
 
     # Telegram Bot
     bot_token: str
+    bot_link: str = "https://t.me/testAiogram12Bot"  # Link to the bot for referral links
+    bot_name: str = "testAiogram12Bot"  # Name of the bot for display in messages
+    support_link: str = "https://t.me/support"  # Link to support channel/chat
+
+    # Legal links
+    privacy_policy_link: str = "https://telegra.ph/Politika-konfidencialnosti-08-15-17"
+    user_agreement_link: str = "https://telegra.ph/Polzovatelskoe-soglashenie-08-15-10"
 
     # Database
     db_host: str = "localhost"
@@ -27,12 +35,28 @@ class Settings(BaseSettings):
     db_password: str = "postgres"
 
     # Referral System
-    referral_bonus_percent: Decimal = Decimal("10.00")
+    referral_bonus_percent: Decimal = Decimal("20.00")
     referral_code_length: int = 8
 
     # Application
     debug: bool = False
     proxy_url: str = ""
+
+    # Platega Payment Provider
+    platega_api_url: str = "https://app.platega.io"
+    platega_merchant_id: str = ""  # X-MerchantId header (UUID)
+    platega_secret: str = ""  # X-Secret header (API key)
+    platega_webhook_url: str = ""  # URL for receiving webhooks (must be publicly accessible)
+    platega_webhook_secret: str = ""  # Secret for webhook signature verification
+    default_payment_provider: str = "platega"
+
+    # Payment Auto-Check Settings
+    payment_check_interval_minutes: int = 5  # Check every 5 minutes
+    payment_expiry_timeout_hours: int = 1  # Mark as expired after 1 hour
+
+    # Subscription Expiry Notification Settings
+    subscription_expiry_check_interval_hours: int = 1  # Check every hour
+    subscription_expiry_notify_hours: int = 24  # Notify 24 hours before expiry
 
     @field_validator("debug", mode="before")
     @classmethod
@@ -54,11 +78,11 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
-    def admin_id_list(self) -> list[int]:
+    def admin_id_list(self) -> list[str]:
         """Parse admin IDs from comma-separated string."""
         if not self.admin_ids.strip():
             return []
-        return [int(id.strip()) for id in self.admin_ids.split(",") if id.strip()]
+        return [id.strip() for id in self.admin_ids.split(",") if id.strip()]
 
     @property
     def database_url(self) -> str:

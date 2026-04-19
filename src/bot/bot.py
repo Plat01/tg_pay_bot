@@ -5,9 +5,10 @@ import os
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.fsm.storage.memory import MemoryStorage
 
+from src.bot.handlers import register_handlers
 from src.config import settings
-from src.handlers import register_handlers
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,9 @@ if proxy_url:
 else:
     logger.info("Running without proxy")
     bot = Bot(token=settings.bot_token)
-dp = Dispatcher()
+
+# Initialize dispatcher with storage for FSM
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
 
 register_handlers(dp)

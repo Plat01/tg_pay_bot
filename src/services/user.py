@@ -2,13 +2,16 @@
 
 import random
 import string
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.infrastructure.database.repositories import UserRepository
 from src.models.user import User
-from src.repositories.user import UserRepository
 
 
 class UserService:
@@ -26,7 +29,7 @@ class UserService:
 
     async def get_or_create_user(
         self,
-        telegram_id: int,
+        telegram_id: int | str,
         username: str | None = None,
         first_name: str | None = None,
         last_name: str | None = None,
@@ -36,7 +39,9 @@ class UserService:
         referral_code: str | None = None,
     ) -> User:
         """Get existing user or create a new one."""
-        user = await self.repository.get_by_telegram_id(telegram_id)
+        # Convert telegram_id to string for storage
+        telegram_id_str = str(telegram_id)
+        user = await self.repository.get_by_telegram_id(telegram_id_str)
 
         if user:
             # Update user info if changed
@@ -53,13 +58,13 @@ class UserService:
                 update_data["is_premium"] = is_premium
 
             if update_data:
-                update_data["updated_at"] = datetime.utcnow()
+                update_data["updated_at"] = datetime.now(timezone.utc)
                 user = await self.repository.update(user, update_data)
             return user
 
         # Create new user
         user_data = {
-            "telegram_id": telegram_id,
+            "telegram_id": telegram_id_str,
             "username": username,
             "first_name": first_name,
             "last_name": last_name,
@@ -75,16 +80,54 @@ class UserService:
             if referrer:
                 user_data["referred_by_id"] = referrer.id
 
-        return await self.repository.create(user_data)
+        try:
+            return await self.repository.create(user_data)
+        except IntegrityError:
+            # Race condition: another request already created this user
+            await self.session.rollback()
+            user = await self.repository.get_by_telegram_id(telegram_id_str)
+            if user:
+                return user
+            raise
 
-    async def get_user_by_telegram_id(self, telegram_id: int) -> User | None:
+    async def get_user_by_telegram_id(self, telegram_id: int | str) -> User | None:
         """Get user by Telegram ID."""
-        return await self.repository.get_by_telegram_id(telegram_id)
+        return await self.repository.get_by_telegram_id(str(telegram_id))
 
     async def get_user_by_referral_code(self, referral_code: str) -> User | None:
         """Get user by referral code."""
         return await self.repository.get_by_referral_code(referral_code)
 
-    async def get_referrals(self, user_id: int) -> list[User]:
+    async def get_referrals(self, user_id: uuid.UUID) -> list[User]:
         """Get all users referred by this user."""
         return await self.repository.get_referrals(user_id)
+
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        """Get user by internal ID."""
+        return await self.repository.get_by_id(user_id)
+
+    async def update_balance(self, user: User, amount: Decimal) -> User:
+        """Update user balance.
+
+        Args:
+            user: User instance.
+            amount: Amount to add (can be negative for deductions).
+
+        Returns:
+            Updated User instance.
+        """
+        new_balance = user.balance + amount
+        user = await self.repository.update(user, {"balance": new_balance})
+        return user
+
+    async def mark_trial_used(self, user: User) -> User:
+        """Mark user as having used trial period.
+
+        Args:
+            user: User instance.
+
+        Returns:
+            Updated User instance with is_new=False.
+        """
+        user = await self.repository.update(user, {"is_new": False})
+        return user
