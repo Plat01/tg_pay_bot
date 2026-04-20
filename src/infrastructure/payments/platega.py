@@ -205,9 +205,38 @@ class PlategaProvider(PaymentProvider):
             async with session.post(url, json=request_data.model_dump(by_alias=True)) as response:
                 response_data = await response.json()
 
-                if response.status != 200 and response.status != 201:
+                logger.debug(
+                    "Platega API response",
+                    extra={
+                        "status": response.status,
+                        "response_data": response_data,
+                    },
+                )
+
+                if response.status not in (200, 201):
                     error_msg = response_data.get("message", "Unknown error")
                     logger.error(f"Platega create payment failed: {response.status} - {error_msg}")
+
+                    transaction_id_raw = response_data.get("transactionId")
+                    if transaction_id_raw:
+                        transaction_id = str(transaction_id_raw)
+                        logger.warning(
+                            f"Transaction created but with error: {transaction_id}",
+                            extra={"error": error_msg, "transaction_id": transaction_id},
+                        )
+                        return PlategaCreatePaymentResult(
+                            success=False,
+                            payment_id=transaction_id,
+                            external_id=transaction_id,
+                            payment_url=response_data.get("redirect", ""),
+                            amount=amount,
+                            currency=currency,
+                            error_message=error_msg,
+                            transaction_id=transaction_id,
+                            metadata={"transaction_id": transaction_id},
+                            raw_response=response_data,
+                        )
+
                     return PlategaCreatePaymentResult(
                         success=False,
                         payment_id="",
