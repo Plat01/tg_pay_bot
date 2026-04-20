@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 logger = logging.getLogger(__name__)
 
 from aiogram import Dispatcher, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -179,22 +180,30 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
                 subscriptions_list="\n".join(subscriptions_list),
             )
 
-            await callback.message.edit_text(
-                profile_text,
-                parse_mode="HTML",
-                reply_markup=Keyboards.subscription_links(subscriptions),
-            )
+            try:
+                await callback.message.edit_text(
+                    profile_text,
+                    parse_mode="HTML",
+                    reply_markup=Keyboards.subscription_links(subscriptions),
+                )
+            except TelegramBadRequest as e:
+                if "message is not modified" not in str(e):
+                    raise
         else:
             profile_text = Texts.PROFILE_NO_SUBSCRIPTION.format(
                 username=display_name,
                 balance=user.balance,
             )
 
-            await callback.message.edit_text(
-                profile_text,
-                parse_mode="HTML",
-                reply_markup=await Keyboards.buy_subscription(),
-            )
+            try:
+                await callback.message.edit_text(
+                    profile_text,
+                    parse_mode="HTML",
+                    reply_markup=await Keyboards.buy_subscription(),
+                )
+            except TelegramBadRequest as e:
+                if "message is not modified" not in str(e):
+                    raise
         await callback.answer()
 
 
