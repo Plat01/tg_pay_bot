@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import Column, DateTime, JSON
 from sqlmodel import Field, Relationship, SQLModel
@@ -68,8 +68,9 @@ class EncryptedSubscription(SQLModel, table=True):
     max_devices: int | None = Field(default=None, description="Max devices limit")
 
     # Relationship to Subscription (nullable for trial)
-    subscription: "Subscription | None" = Relationship(
-        back_populates="encrypted_subscription"
+    subscription: Optional["Subscription"] = Relationship(
+        back_populates="encrypted_subscription",
+        sa_relationship_kwargs={"uselist": False}
     )
 
     class Config:
