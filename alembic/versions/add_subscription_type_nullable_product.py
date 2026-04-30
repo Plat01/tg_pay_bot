@@ -1,6 +1,6 @@
 """add subscription_type and make product_id nullable
 
-Revision ID: add_subscription_type_nullable_product
+Revision ID: add_sub_type_nullable_product
 Revises: create_encrypted_subs
 Create Date: 2026-04-30 23:50:00.000000
 
@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "add_subscription_type_nullable_product"
+revision: str = "add_sub_type_nullable_product"
 down_revision: Union[str, None] = "create_encrypted_subs"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
