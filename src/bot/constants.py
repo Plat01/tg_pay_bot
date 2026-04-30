@@ -74,10 +74,8 @@ class Commands:
     BALANCE = "balance"
     DEPOSIT = "deposit"
     REFERRAL = "referral"
-    SEND_SUBSCRIPTION_LINKS = "send_sub_links"
     ALL_MESSAGE = "all_message"
     PAID_MESSAGE = "pay_message"
-    PRICES = "prices"
     SUBSCRIPTIONS = "subscriptions"
     USER_PAYMENTS = "payments"
 

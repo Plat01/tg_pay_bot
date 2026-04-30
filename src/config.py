@@ -58,6 +58,17 @@ class Settings(BaseSettings):
     subscription_expiry_check_interval_hours: int = 1  # Check every hour
     subscription_expiry_notify_hours: int = 24  # Notify 24 hours before expiry
 
+    # VPN Subscription API (sub-oval.online)
+    vpn_sub_api_url: str = "https://sub-oval.online"
+    vpn_sub_admin_username: str = "admin"
+    vpn_sub_admin_password: str = ""  # Required for API access
+
+    # Default subscription settings (used in metadata)
+    default_max_devices: int = 3
+    default_announce_text: str = "Проверяйте пинг перед подключением"
+    default_info_block_text: str = "Для продления подписки обратитесь в поддержку"
+    default_info_block_color: str = "blue"
+
     @field_validator("debug", mode="before")
     @classmethod
     def validate_debug(cls, v: str | bool) -> bool:

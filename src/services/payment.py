@@ -3,7 +3,7 @@
 This module provides business logic for payment operations:
 - Creating payments (external via Platega, internal balance top-ups)
 - Checking payment status via Platega API
-- Completing payments and delivering products (balance or subscriptions)
+- Completing payments and delivering subscriptions (balance or VPN subscriptions)
 - Managing payment records in database
 """
 
@@ -14,14 +14,13 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 from src.services.tariff import TariffService
 from src.services.referral import ReferralService
+from src.services.vpn_subscription import VpnSubscriptionService, TARIFF_DURATION
 from src.config import settings
 from src.infrastructure.database.repositories import (
     PaymentRepository,
-    ProductRepository,
     UserRepository,
 )
 from src.infrastructure.payments import (
@@ -30,11 +29,10 @@ from src.infrastructure.payments import (
     CreatePaymentResult,
     PlategaPaymentMethod,
 )
+from src.infrastructure.vpn_subscription.exceptions import VpnSubscriptionError
 from src.models.payment import Payment, PaymentStatus
-from src.models.product import SubscriptionType
 from src.models.user import User
 from src.services.subscription import SubscriptionService
-from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +71,9 @@ class PaymentService:
         self.session = session
         self.repository = PaymentRepository(session)
         self.user_repository = UserRepository(session)
-        self.product_repository = ProductRepository(session)
         self.referral_service = ReferralService(session)
         self.subscription_service = SubscriptionService(session)
+        self.vpn_subscription_service: VpnSubscriptionService | None = None
         self.provider_name = provider_name or settings.default_payment_provider
         self._provider: PaymentProvider | None = None
         self._closed: bool = False
@@ -523,7 +521,8 @@ class PaymentService:
             Dict with subscription details
 
         Raises:
-            ValueError: If tariff or product not found
+            ValueError: If tariff not found
+            VpnSubscriptionError: If VPN subscription creation fails
         """
         tariff_service = TariffService(self.session)
         tariff_type = await tariff_service.get_tariff_by_price(int(payment.amount))
@@ -531,22 +530,44 @@ class PaymentService:
         if not tariff_type:
             raise ValueError(f"Cannot determine tariff for amount {payment.amount}")
 
-        product = await self.product_repository.get_product_by_subscription_type(tariff_type)
+        if tariff_type not in TARIFF_DURATION:
+            raise ValueError(f"Invalid tariff type: {tariff_type}")
 
-        if not product:
-            raise ValueError(f"Product not found for tariff {tariff_type}")
+        duration_days = TARIFF_DURATION[tariff_type]["days"]
 
         subscription = await self.subscription_service.create_subscription(
             user_id=payment.user_id,
-            product_id=product.id,
-            duration_days=product.duration_days,
+            subscription_type=tariff_type,
+            duration_days=duration_days,
         )
+
+        vpn_link = None
+        try:
+            self.vpn_subscription_service = VpnSubscriptionService(self.session)
+            encrypted_sub = await self.vpn_subscription_service.create_subscription_for_tariff(
+                tariff_type=tariff_type,
+                subscription_id=subscription.id,
+            )
+            vpn_link = encrypted_sub.encrypted_link
+
+            encrypted_sub.subscription_id = subscription.id
+            self.session.add(encrypted_sub)
+            await self.session.commit()
+        except VpnSubscriptionError as e:
+            logger.error(
+                f"Failed to create VPN subscription: {e}",
+                extra={
+                    "payment_id": str(payment.id),
+                    "subscription_id": str(subscription.id),
+                    "tariff_type": tariff_type,
+                },
+            )
 
         return {
             "type": "subscription",
             "subscription_id": subscription.id,
-            "vpn_link": product.happ_link,
-            "duration_days": product.duration_days,
+            "vpn_link": vpn_link or "VPN link pending - try again later",
+            "duration_days": duration_days,
         }
 
     async def _deliver_balance_topup(self, payment: Payment) -> dict[str, Any]:
