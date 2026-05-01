@@ -1,5 +1,6 @@
 """Start command handler for user registration and main menu handlers."""
 
+import html
 import logging
 from datetime import datetime
 from decimal import Decimal
@@ -163,6 +164,7 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
         if user.last_name:
             name_parts.append(user.last_name)
         display_name = " ".join(name_parts) if name_parts else (user.username or f"#{user.id}")
+        display_name = html.escape(display_name)
 
         if subscriptions:
             subscriptions_list = []

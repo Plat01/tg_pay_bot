@@ -156,15 +156,9 @@ class PaymentService:
             "status": PaymentStatus.PENDING,
         }
 
-        logger.info(
-            f"Creating payment record",
-            extra={
-                "user_id": user_id,
-                "telegram_id": telegram_id,
-                "amount": str(amount),
-                "currency": currency,
-                "provider": payment_provider or self.provider_name,
-            },
+        logger.error(
+            f"Creating payment record: user_id={user_id}, telegram_id={telegram_id}, "
+            f"amount={amount}, currency={currency}, provider={payment_provider or self.provider_name}"
         )
 
         return await self.repository.create(payment_data)
@@ -206,16 +200,9 @@ class PaymentService:
         """
         user_id = await self._get_user_id_by_telegram_id(telegram_id)
 
-        logger.info(
-            f"Creating external payment",
-            extra={
-                "telegram_id": telegram_id,
-                "user_id": user_id,
-                "amount": str(amount),
-                "currency": currency,
-                "method": payment_method.name,
-                "provider": self.provider_name,
-            },
+        logger.error(
+            f"Creating external payment: telegram_id={telegram_id}, user_id={user_id}, "
+            f"amount={amount}, currency={currency}, method={payment_method.name}, provider={self.provider_name}"
         )
 
         # Create payment in external system
@@ -233,14 +220,10 @@ class PaymentService:
         # Validate external_id before saving
         if not external_result.external_id or external_result.external_id.strip() == "":
             logger.error(
-                f"Provider returned empty external_id",
-                extra={
-                    "telegram_id": telegram_id,
-                    "amount": str(amount),
-                    "provider": self.provider_name,
-                    "success": external_result.success,
-                    "error_message": external_result.error_message,
-                },
+                f"Provider returned empty external_id: "
+                f"provider={self.provider_name}, telegram_id={telegram_id}, "
+                f"amount={amount}, success={external_result.success}, "
+                f"error_message={external_result.error_message}"
             )
             raise ValueError(
                 "Платеж не создан: провайдер вернул пустый external_id. "
@@ -258,14 +241,9 @@ class PaymentService:
             payment_metadata=external_result.metadata,
         )
 
-        logger.info(
-            f"External payment created successfully",
-            extra={
-                "payment_id": payment.id,
-                "external_id": external_result.external_id,
-                "telegram_id": telegram_id,
-                "user_id": user_id,
-            },
+        logger.error(
+            f"External payment created successfully: payment_id={payment.id}, "
+            f"external_id={external_result.external_id}, telegram_id={telegram_id}, user_id={user_id}"
         )
 
         return payment, external_result
@@ -333,26 +311,18 @@ class PaymentService:
                 f"Payment {payment.id} has no external_id, cannot check status with provider"
             )
 
-        logger.info(
-            f"Checking payment status",
-            extra={
-                "payment_id": payment.id,
-                "external_id": payment.external_id,
-                "current_status": payment.status.value,
-            },
+        logger.error(
+            f"Checking payment status: payment_id={payment.id}, "
+            f"external_id={payment.external_id}, current_status={payment.status.value}"
         )
 
         # Get status from provider
         status_result = await self.provider.get_payment_status(payment.external_id)
         new_status = status_result.status
 
-        logger.info(
-            f"Payment status from provider",
-            extra={
-                "payment_id": payment.id,
-                "external_status": status_result.external_status,
-                "mapped_status": new_status.value,
-            },
+        logger.error(
+            f"Payment status from provider: payment_id={payment.id}, "
+            f"external_status={status_result.external_status}, mapped_status={new_status.value}"
         )
 
         # Update if status changed
@@ -367,13 +337,9 @@ class PaymentService:
                 # Just update status without special processing
                 payment = await self.repository.update_status(payment, new_status)
 
-            logger.info(
-                f"Payment status updated",
-                extra={
-                    "payment_id": payment.id,
-                    "old_status": payment.status.value,
-                    "new_status": new_status.value,
-                },
+            logger.error(
+                f"Payment status updated: payment_id={payment.id}, "
+                f"old_status={payment.status.value}, new_status={new_status.value}"
             )
 
         return payment
@@ -392,13 +358,9 @@ class PaymentService:
         Returns:
             Updated Payment instance.
         """
-        logger.info(
-            f"Completing payment",
-            extra={
-                "payment_id": payment.id,
-                "user_id": payment.user_id,
-                "amount": str(payment.amount),
-            },
+        logger.error(
+            f"Completing payment: payment_id={payment.id}, "
+            f"user_id={payment.user_id}, amount={payment.amount}"
         )
 
         # Update payment status
@@ -412,20 +374,17 @@ class PaymentService:
         if payment.payment_provider != "balance":
             try:
                 await self.referral_service.process_referral_earning(payment)
-                logger.info(
-                    f"Referral earnings processed",
-                    extra={"payment_id": payment.id},
+                logger.error(
+                    f"Referral earnings processed: payment_id={payment.id}"
                 )
             except Exception as e:
                 # Log error but don't fail the payment completion
                 logger.error(
-                    f"Failed to process referral earnings: {e}",
-                    extra={"payment_id": payment.id},
+                    f"Failed to process referral earnings: {e} (payment_id={payment.id})"
                 )
         else:
-            logger.info(
-                f"Skipping referral earnings for balance payment",
-                extra={"payment_id": payment.id},
+            logger.error(
+                f"Skipping referral earnings for balance payment: payment_id={payment.id}"
             )
 
         return payment
@@ -439,10 +398,7 @@ class PaymentService:
         Returns:
             Updated Payment instance.
         """
-        logger.info(
-            f"Failing payment",
-            extra={"payment_id": payment.id},
-        )
+        logger.error(f"Failing payment: payment_id={payment.id}")
         return await self.repository.update_status(payment, PaymentStatus.FAILED)
 
     async def cancel_payment(self, payment: Payment) -> Payment:
@@ -454,10 +410,7 @@ class PaymentService:
         Returns:
             Updated Payment instance.
         """
-        logger.info(
-            f"Cancelling payment",
-            extra={"payment_id": payment.id},
-        )
+        logger.error(f"Cancelling payment: payment_id={payment.id}")
         return await self.repository.update_status(payment, PaymentStatus.CANCELLED)
 
     async def complete_payment_and_deliver(
@@ -479,33 +432,23 @@ class PaymentService:
         Raises:
             ValueError: If payment type unknown or product not found
         """
-        logger.info(
-            f"Completing payment and delivering product",
-            extra={
-                "payment_id": str(payment.id),
-                "amount": str(payment.amount),
-                "description": payment.description,
-            },
+        logger.error(
+            f"Completing payment and delivering product: payment_id={payment.id}, "
+            f"amount={payment.amount}, description={payment.description}"
         )
 
         if payment.description and payment.description.startswith("Подписка:"):
             result = await self._deliver_subscription(payment)
-            logger.info(
-                f"Subscription delivered",
-                extra={
-                    "payment_id": str(payment.id),
-                    "subscription_id": str(result["subscription_id"]),
-                },
+            logger.error(
+                f"Subscription delivered: payment_id={payment.id}, "
+                f"subscription_id={result['subscription_id']}"
             )
             return result
         elif payment.description and payment.description.startswith("Пополнение"):
             result = await self._deliver_balance_topup(payment)
-            logger.info(
-                f"Balance topup delivered",
-                extra={
-                    "payment_id": str(payment.id),
-                    "new_balance": str(result["new_balance"]),
-                },
+            logger.error(
+                f"Balance topup delivered: payment_id={payment.id}, "
+                f"new_balance={result['new_balance']}"
             )
             return result
         else:
