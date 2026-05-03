@@ -403,6 +403,65 @@ async def cmd_user_payments(message: Message) -> None:
         await message.answer(f"❌ Произошла ошибка при получении платежей: {e}")
 
 
+async def cmd_payment_by_external_id(message: Message) -> None:
+    """Admin command to find user by payment external_id.
+
+    Usage: /payment_by_ext <external_id>
+    """
+    if not message.from_user:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    admin_id = str(message.from_user.id)
+    if admin_id not in settings.admin_id_list:
+        logger.warning(f"Non-admin user {admin_id} tried to access payment_by_ext command")
+        await message.answer("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    if not message.text:
+        await message.answer(
+            "❌ Укажите external_id платежа.\n\nИспользование: /payment_by_ext <external_id>"
+        )
+        return
+
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer(
+            "❌ Укажите external_id платежа.\n\nИспользование: /payment_by_ext <external_id>"
+        )
+        return
+
+    external_id = parts[1].strip()
+
+    try:
+        async with async_session_maker() as session:
+            payment_repository = PaymentRepository(session)
+
+            payment = await payment_repository.get_by_external_id(external_id)
+            if not payment:
+                await message.answer(f"❌ Платеж с external_id {external_id} не найден.")
+                return
+
+            user = payment.user
+            if not user:
+                await message.answer("❌ Пользователь платежа не найден.")
+                return
+
+            payments = await payment_repository.get_user_payments(
+                user.id, status=None, limit=50
+            )
+
+            info_lines = [_format_user_basic_info(user, user.telegram_id, include_balance=True)]
+            info_lines.append(_format_user_payments_info(payments, limit=10))
+
+            await message.answer("\n".join(info_lines), parse_mode="HTML")
+            logger.info(f"Admin {admin_id} found user by payment external_id {external_id}")
+
+    except Exception as e:
+        logger.error(f"Error finding payment by external_id: {e}")
+        await message.answer(f"❌ Произошла ошибка при поиске платежа: {e}")
+
+
 async def cmd_add_balance(message: Message, state: FSMContext) -> None:
     """Admin command to add balance to user by telegram ID.
 
@@ -898,6 +957,7 @@ def register_admin_handlers(dp: Dispatcher) -> None:
     """Register admin command handlers."""
     dp.message.register(cmd_subscriptions, Command(Commands.SUBSCRIPTIONS))
     dp.message.register(cmd_user_payments, Command(Commands.USER_PAYMENTS))
+    dp.message.register(cmd_payment_by_external_id, Command(Commands.PAYMENT_BY_EXTERNAL_ID))
     dp.message.register(cmd_all_message, Command(Commands.ALL_MESSAGE))
     dp.message.register(cmd_paid_message, Command(Commands.PAID_MESSAGE))
     dp.message.register(cmd_add_balance, Command(Commands.ADD_BALANCE))

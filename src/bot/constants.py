@@ -78,6 +78,7 @@ class Commands:
     PAID_MESSAGE = "pay_message"
     SUBSCRIPTIONS = "subscriptions"
     USER_PAYMENTS = "payments"
+    PAYMENT_BY_EXTERNAL_ID = "payment_by_ext"
     ADD_BALANCE = "add_balance"
     GRANT_SUBSCRIPTION = "grant_subscription"
 
