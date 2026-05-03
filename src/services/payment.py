@@ -29,7 +29,6 @@ from src.infrastructure.payments import (
     CreatePaymentResult,
     PlategaPaymentMethod,
 )
-from src.infrastructure.vpn_subscription.exceptions import VpnSubscriptionError
 from src.models.payment import Payment, PaymentStatus
 from src.models.user import User
 from src.services.subscription import SubscriptionService
@@ -465,7 +464,6 @@ class PaymentService:
 
         Raises:
             ValueError: If tariff not found
-            VpnSubscriptionError: If VPN subscription creation fails
         """
         tariff_service = TariffService(self.session)
         tariff_type = await tariff_service.get_tariff_by_price(int(payment.amount))
@@ -492,11 +490,8 @@ class PaymentService:
                 subscription_id=subscription.id,
             )
             vpn_link = encrypted_sub.encrypted_link
-
-            encrypted_sub.subscription_id = subscription.id
-            self.session.add(encrypted_sub)
-            await self.session.commit()
-        except VpnSubscriptionError as e:
+            await self.vpn_subscription_service.close_client()
+        except Exception as e:
             logger.error(
                 f"Failed to create VPN subscription: {e}",
                 extra={
@@ -505,6 +500,10 @@ class PaymentService:
                     "tariff_type": tariff_type,
                 },
             )
+
+        subscription.subscription_type = tariff_type
+        self.session.add(subscription)
+        await self.session.commit()
 
         return {
             "type": "subscription",

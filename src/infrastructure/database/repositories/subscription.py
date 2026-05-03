@@ -88,9 +88,10 @@ class SubscriptionRepository(BaseRepository[Subscription]):
     async def create_subscription(
         self,
         user_id: uuid.UUID,
-        product_id: uuid.UUID,
+        product_id: uuid.UUID | None,
         end_date: datetime,
         start_date: datetime,
+        subscription_type: str | None = None,
     ) -> Subscription:
         """Create a new subscription."""
         subscription_data = {
@@ -98,6 +99,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             "product_id": product_id,
             "end_date": end_date,
             "start_date": start_date,
+            "subscription_type": subscription_type,
         }
         return await self.create(subscription_data)
 

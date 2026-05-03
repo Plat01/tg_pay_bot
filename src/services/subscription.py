@@ -67,6 +67,7 @@ class SubscriptionService:
             product_id=None,
             end_date=end_date,
             start_date=datetime.now(MSK_TZ),
+            subscription_type=subscription_type,
         )
 
     async def create_subscription_with_encrypted(
@@ -125,6 +126,7 @@ class SubscriptionService:
             product_id=None,
             end_date=end_date,
             start_date=datetime.now(MSK_TZ),
+            subscription_type=subscription_type,
         )
 
     async def activate_trial(

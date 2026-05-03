@@ -399,6 +399,7 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
                     subscription_id=subscription.id,
                 )
                 vpn_link = encrypted_sub.encrypted_link
+                await vpn_service.close_client()
             except Exception as e:
                 logger.error(f"Failed to create VPN subscription: {e}")
 
