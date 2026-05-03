@@ -49,7 +49,7 @@ def _format_user_basic_info(user: "User", telegram_id: str, include_balance: boo
     return "\n".join(lines)
 
 
-def _format_user_payments_info(payments: list, limit: int = 5) -> str:
+def _format_user_payments_info(payments: list, limit: int = 50) -> str:
     """Format user payments info for display.
 
     Args:
