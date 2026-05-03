@@ -399,17 +399,43 @@ async def process_add_balance_telegram_id(message: Message, state: FSMContext) -
     try:
         async with async_session_maker() as session:
             user_repository = UserRepository(session)
+            payment_repository = PaymentRepository(session)
+
             user = await user_repository.get_by_telegram_id(telegram_id)
             if not user:
                 await message.answer(f"❌ Пользователь с Telegram ID {telegram_id} не найден.\nПопробуйте снова:")
                 return
 
+            # Получаем последние пополнения (completed/paid)
+            from src.models.payment import PaymentStatus
+            payments = await payment_repository.get_user_payments(
+                user.id, status=PaymentStatus.COMPLETED, limit=50
+            )
+
+            # Формируем информацию о пользователе
+            username = f"@{user.username}" if user.username else "Без username"
+            info_lines = [
+                f"👤 <b>Пользователь найден:</b> {username}",
+                f"🆔 Telegram ID: {telegram_id}",
+                f"💰 <b>Баланс:</b> {user.balance:.2f} RUB",
+            ]
+
+            # Добавляем информацию о пополнениях
+            if payments:
+                info_lines.append(f"\n📊 <b>Последние пополнения ({len(payments)}):</b>")
+                for payment in payments:
+                    created_msk = payment.created_at.astimezone(MSK_TZ)
+                    created_str = created_msk.strftime("%d.%m.%Y %H:%M")
+                    info_lines.append(f"  • {payment.amount:.2f} RUB — {created_str}")
+            else:
+                info_lines.append("\n📊 <b>Пополнений нет</b>")
+
+            info_lines.append("\n\nВведите сумму для начисления (в рублях):")
+
             await state.update_data(telegram_id=telegram_id, user_display=f"@{user.username}" if user.username else telegram_id)
             await state.set_state(AddBalanceStates.waiting_for_amount)
-            await message.answer(
-                f"👤 Пользователь найден: {user.username or telegram_id}\n\n"
-                "Введите сумму для начисления (в рублях):"
-            )
+            await message.answer("\n".join(info_lines), parse_mode="HTML")
+
     except Exception as e:
         logger.error(f"Error finding user for add_balance: {e}")
         await message.answer(f"❌ Ошибка при поиске пользователя: {e}")
