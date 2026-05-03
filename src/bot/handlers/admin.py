@@ -19,12 +19,34 @@ from src.infrastructure.database.repositories import (
     UserRepository,
 )
 from src.models.subscription import Subscription
+from src.models.user import User
 from src.services.subscription import TARIFF_DURATION_DAYS, SubscriptionService
 from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
 
 MSK_TZ = ZoneInfo("Europe/Moscow")
+
+
+def _format_user_basic_info(user: "User", telegram_id: str, include_balance: bool = False) -> str:
+    """Format basic user info for display.
+
+    Args:
+        user: User instance.
+        telegram_id: User's Telegram ID.
+        include_balance: Whether to include balance info.
+
+    Returns:
+        Formatted string with basic user info.
+    """
+    username = f"@{user.username}" if user.username else "Без username"
+    lines = [
+        f"👤 <b>Пользователь найден:</b> {username}",
+        f"🆔 Telegram ID: {telegram_id}",
+    ]
+    if include_balance:
+        lines.append(f"💰 <b>Баланс:</b> {user.balance:.2f} RUB")
+    return "\n".join(lines)
 
 
 def _format_user_payments_info(payments: list, limit: int = 5) -> str:
@@ -448,12 +470,7 @@ async def process_add_balance_telegram_id(message: Message, state: FSMContext) -
                 user.id, status=PaymentStatus.COMPLETED, limit=50
             )
 
-            username = f"@{user.username}" if user.username else "Без username"
-            info_lines = [
-                f"👤 <b>Пользователь найден:</b> {username}",
-                f"🆔 Telegram ID: {telegram_id}",
-                f"💰 <b>Баланс:</b> {user.balance:.2f} RUB",
-            ]
+            info_lines = [_format_user_basic_info(user, telegram_id, include_balance=True)]
 
             info_lines.append(_format_user_payments_info(payments, limit=5))
 
@@ -689,11 +706,7 @@ async def process_grant_subscription_telegram_id(message: Message, state: FSMCon
                 user.id, status=PaymentStatus.COMPLETED, limit=50
             )
 
-            username = f"@{user.username}" if user.username else "Без username"
-            info_lines = [
-                f"👤 <b>Пользователь найден:</b> {username}",
-                f"🆔 Telegram ID: {telegram_id}",
-            ]
+            info_lines = [_format_user_basic_info(user, telegram_id, include_balance=False)]
 
             if subscriptions:
                 info_lines.append(f"\n📋 <b>Активные подписки ({len(subscriptions)}):</b>")
