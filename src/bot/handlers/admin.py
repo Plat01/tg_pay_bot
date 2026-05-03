@@ -27,6 +27,30 @@ logger = logging.getLogger(__name__)
 MSK_TZ = ZoneInfo("Europe/Moscow")
 
 
+def _format_user_payments_info(payments: list, limit: int = 5) -> str:
+    """Format user payments info for display.
+
+    Args:
+        payments: List of Payment instances.
+        limit: Maximum number of payments to show.
+
+    Returns:
+        Formatted string with payments info.
+    """
+    if not payments:
+        return "\n📊 <b>Пополнений нет</b>"
+
+    display_payments = payments[:limit]
+    lines = [f"\n📊 <b>Последние пополнения ({len(display_payments)}):</b>"]
+    for payment in display_payments:
+        created_msk = payment.created_at.astimezone(MSK_TZ)
+        created_str = created_msk.strftime("%d.%m.%Y %H:%M")
+        desc = payment.description or "—"
+        lines.append(f"  • {payment.amount:.2f} RUB — {desc} ({created_str})")
+
+    return "\n".join(lines)
+
+
 class BroadcastStates(StatesGroup):
     """States for broadcast message collection."""
 
@@ -418,14 +442,12 @@ async def process_add_balance_telegram_id(message: Message, state: FSMContext) -
                 )
                 return
 
-            # Получаем последние пополнения (completed/paid)
             from src.models.payment import PaymentStatus
 
             payments = await payment_repository.get_user_payments(
                 user.id, status=PaymentStatus.COMPLETED, limit=50
             )
 
-            # Формируем информацию о пользователе
             username = f"@{user.username}" if user.username else "Без username"
             info_lines = [
                 f"👤 <b>Пользователь найден:</b> {username}",
@@ -433,15 +455,7 @@ async def process_add_balance_telegram_id(message: Message, state: FSMContext) -
                 f"💰 <b>Баланс:</b> {user.balance:.2f} RUB",
             ]
 
-            # Добавляем информацию о пополнениях
-            if payments:
-                info_lines.append(f"\n📊 <b>Последние пополнения ({len(payments)}):</b>")
-                for payment in payments:
-                    created_msk = payment.created_at.astimezone(MSK_TZ)
-                    created_str = created_msk.strftime("%d.%m.%Y %H:%M")
-                    info_lines.append(f"  • {payment.amount:.2f} RUB — {created_str}")
-            else:
-                info_lines.append("\n📊 <b>Пополнений нет</b>")
+            info_lines.append(_format_user_payments_info(payments, limit=5))
 
             info_lines.append("\n\nВведите сумму для начисления (в рублях):")
 
@@ -691,15 +705,7 @@ async def process_grant_subscription_telegram_id(message: Message, state: FSMCon
             else:
                 info_lines.append("\n📋 <b>Активных подписок нет</b>")
 
-            if payments:
-                info_lines.append(f"\n📊 <b>Последние пополнения ({len(payments)}):</b>")
-                for payment in payments:
-                    created_msk = payment.created_at.astimezone(MSK_TZ)
-                    created_str = created_msk.strftime("%d.%m.%Y %H:%M")
-                    desc = payment.description or "—"
-                    info_lines.append(f"  • {payment.amount:.2f} RUB — {desc} ({created_str})")
-            else:
-                info_lines.append("\n📊 <b>Пополнений нет</b>")
+            info_lines.append(_format_user_payments_info(payments, limit=5))
 
             info_lines.append("\n\n<b>Выберите тип подписки:</b>")
             for sub_type, days in TARIFF_DURATION_DAYS.items():
