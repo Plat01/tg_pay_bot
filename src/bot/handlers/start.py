@@ -1,5 +1,6 @@
 """Start command handler for user registration and main menu handlers."""
 
+import html
 import logging
 from zoneinfo import ZoneInfo
 
