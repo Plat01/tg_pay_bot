@@ -78,6 +78,7 @@ class Commands:
     PAID_MESSAGE = "pay_message"
     SUBSCRIPTIONS = "subscriptions"
     USER_PAYMENTS = "payments"
+    ADD_BALANCE = "add_balance"
 
 
 class Limits:

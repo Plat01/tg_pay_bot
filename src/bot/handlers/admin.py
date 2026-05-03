@@ -20,6 +20,7 @@ from src.infrastructure.database.repositories import (
 )
 from src.models.subscription import Subscription
 from src.services.tariff import TariffService, DEFAULT_PRICES
+from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,15 @@ class BroadcastStates(StatesGroup):
 
     waiting_for_all_message = State()
     waiting_for_paid_message = State()
+
+
+class AddBalanceStates(StatesGroup):
+    """States for balance top-up process."""
+
+    waiting_for_telegram_id = State()
+    waiting_for_amount = State()
+    waiting_for_notification_message = State()
+    waiting_for_confirmation = State()
 
 
 async def cmd_all_message(message: Message, state: FSMContext) -> None:
@@ -337,6 +347,221 @@ async def cmd_user_payments(message: Message) -> None:
         await message.answer(f"❌ Произошла ошибка при получении платежей: {e}")
 
 
+async def cmd_add_balance(message: Message, state: FSMContext) -> None:
+    """Admin command to add balance to user by telegram ID.
+
+    Usage: /add_balance [telegram_id] [amount]
+    If arguments provided, executes immediately.
+    Otherwise starts interactive process.
+    """
+    if not message.from_user:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    admin_id = str(message.from_user.id)
+    if admin_id not in settings.admin_id_list:
+        logger.warning(f"Non-admin user {admin_id} tried to access add_balance command")
+        await message.answer("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    parts = message.text.split() if message.text else []
+
+    if len(parts) >= 3:
+        telegram_id = parts[1].strip()
+        try:
+            amount = float(parts[2].strip())
+            if amount <= 0:
+                await message.answer("❌ Сумма должна быть положительным числом.")
+                return
+        except ValueError:
+            await message.answer("❌ Неверный формат суммы. Укажите число.")
+            return
+
+        await _execute_add_balance(message, telegram_id, amount)
+    else:
+        await state.set_state(AddBalanceStates.waiting_for_telegram_id)
+        await message.answer(
+            "💰 <b>Начисление баланса пользователю</b>\n\n"
+            "Введите Telegram ID пользователя:\n"
+            "Для отмены введите /cancel"
+        )
+        logger.info(f"Admin {admin_id} started add_balance process")
+
+
+async def process_add_balance_telegram_id(message: Message, state: FSMContext) -> None:
+    """Process telegram ID input for balance top-up."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте текст.")
+        return
+
+    telegram_id = message.text.strip()
+
+    try:
+        async with async_session_maker() as session:
+            user_repository = UserRepository(session)
+            user = await user_repository.get_by_telegram_id(telegram_id)
+            if not user:
+                await message.answer(f"❌ Пользователь с Telegram ID {telegram_id} не найден.\nПопробуйте снова:")
+                return
+
+            await state.update_data(telegram_id=telegram_id, user_display=f"@{user.username}" if user.username else telegram_id)
+            await state.set_state(AddBalanceStates.waiting_for_amount)
+            await message.answer(
+                f"👤 Пользователь найден: {user.username or telegram_id}\n\n"
+                "Введите сумму для начисления (в рублях):"
+            )
+    except Exception as e:
+        logger.error(f"Error finding user for add_balance: {e}")
+        await message.answer(f"❌ Ошибка при поиске пользователя: {e}")
+
+
+async def process_add_balance_amount(message: Message, state: FSMContext) -> None:
+    """Process amount input for balance top-up."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте текст.")
+        return
+
+    try:
+        amount = float(message.text.strip())
+        if amount <= 0:
+            await message.answer("❌ Сумма должна быть положительным числом. Попробуйте снова:")
+            return
+    except ValueError:
+        await message.answer("❌ Неверный формат суммы. Введите число:")
+        return
+
+    await state.update_data(amount=amount)
+    data = await state.get_data()
+
+    # Шаблон сообщения для пользователя
+    default_notification = (
+        f"💰 <b>Ваш баланс пополнен!</b>\n\n"
+        f"💵 Сумма: {amount:.2f} RUB\n\n"
+        f"Спасибо за доверие!"
+    )
+
+    await state.update_data(notification_message=default_notification)
+    await state.set_state(AddBalanceStates.waiting_for_notification_message)
+
+    await message.answer(
+        f"📝 <b>Сообщение для пользователя</b>\n\n"
+        f"Пользователь получит следующее сообщение после начисления.\n"
+        f"Вы можете скопировать и отредактировать его, или отправить как есть:\n\n"
+        f"<code>{default_notification}</code>\n\n"
+        f"Отправьте сообщение или введите 'да' чтобы использовать шаблон выше:",
+        parse_mode="HTML"
+    )
+
+
+async def process_add_balance_notification_message(message: Message, state: FSMContext) -> None:
+    """Process notification message input for balance top-up."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте текст.")
+        return
+
+    data = await state.get_data()
+    response = message.text.strip().lower()
+
+    # Если админ согласен с шаблоном - используем сохраненный
+    if response in ("да", "yes", "y", "д", "+", "ok", "ок"):
+        notification_message = data.get("notification_message", "")
+    else:
+        # Админ отправил свое сообщение
+        notification_message = message.text.strip()
+        await state.update_data(notification_message=notification_message)
+
+    await state.set_state(AddBalanceStates.waiting_for_confirmation)
+    await message.answer(
+        f"⚠️ <b>Подтверждение начисления</b>\n\n"
+        f"👤 Пользователь: {data['user_display']}\n"
+        f"🆔 Telegram ID: {data['telegram_id']}\n"
+        f"💰 Сумма: {data['amount']:.2f} RUB\n\n"
+        f"📝 Сообщение для пользователя:\n"
+        f"<code>{notification_message}</code>\n\n"
+        f"Подтвердите начисление (да/нет):",
+        parse_mode="HTML"
+    )
+
+
+async def process_add_balance_confirmation(message: Message, state: FSMContext) -> None:
+    """Process confirmation for balance top-up."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте текст.")
+        return
+
+    response = message.text.strip().lower()
+
+    if response not in ("да", "yes", "y", "д", "+"):
+        await state.clear()
+        await message.answer("❌ Начисление отменено.")
+        return
+
+    data = await state.get_data()
+    telegram_id = data["telegram_id"]
+    amount = data["amount"]
+    notification_message = data.get("notification_message", "")
+
+    await state.clear()
+    await _execute_add_balance(message, telegram_id, amount, notification_message)
+
+
+async def _execute_add_balance(
+    message: Message, telegram_id: str, amount: float, notification_message: str = ""
+) -> None:
+    """Execute balance top-up and send notification to user."""
+    from decimal import Decimal
+
+    if not message.bot:
+        await message.answer("❌ Ошибка доступа к боту.")
+        return
+
+    try:
+        async with async_session_maker() as session:
+            user_service = UserService(session)
+            user_repository = UserRepository(session)
+
+            user = await user_repository.get_by_telegram_id(telegram_id)
+            if not user:
+                await message.answer(f"❌ Пользователь с Telegram ID {telegram_id} не найден.")
+                return
+
+            old_balance = user.balance
+            new_balance = await user_service.update_balance(user, Decimal(str(amount)))
+
+            # Отправка сообщения пользователю
+            if notification_message:
+                try:
+                    await message.bot.send_message(
+                        chat_id=telegram_id, text=notification_message, parse_mode="HTML"
+                    )
+                    notification_sent = True
+                except Exception as e:
+                    logger.error(f"Failed to send notification to user {telegram_id}: {e}")
+                    notification_sent = False
+            else:
+                notification_sent = False
+
+            username = f"@{user.username}" if user.username else telegram_id
+            notification_status = "✅ Отправлено" if notification_sent else "❌ Не отправлено (блок или без сообщения)"
+
+            await message.answer(
+                f"✅ <b>Баланс успешно пополнен!</b>\n\n"
+                f"👤 Пользователь: {username}\n"
+                f"🆔 Telegram ID: {telegram_id}\n"
+                f"💰 Начислено: {amount:.2f} RUB\n"
+                f"📊 Было: {old_balance:.2f} RUB\n"
+                f"📊 Стало: {new_balance.balance:.2f} RUB\n"
+                f"📤 Уведомление: {notification_status}",
+                parse_mode="HTML"
+            )
+
+            logger.info(f"Admin added {amount} RUB to user {telegram_id} (balance: {old_balance} -> {new_balance.balance})")
+
+    except Exception as e:
+        logger.error(f"Error adding balance: {e}")
+        await message.answer(f"❌ Произошла ошибка при начислении баланса: {e}")
+
+
 async def cmd_cancel(message: Message, state: FSMContext) -> None:
     """Cancel the current broadcast process."""
     if not message.from_user:
@@ -357,9 +582,13 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
     if current_state in [
         BroadcastStates.waiting_for_all_message,
         BroadcastStates.waiting_for_paid_message,
+        AddBalanceStates.waiting_for_telegram_id,
+        AddBalanceStates.waiting_for_amount,
+        AddBalanceStates.waiting_for_notification_message,
+        AddBalanceStates.waiting_for_confirmation,
     ]:
         await state.clear()
-        await message.answer("❌ Процесс рассылки отменен.")
+        await message.answer("❌ Процесс отменен.")
     else:
         await message.answer("❌ Команда /cancel не применима в текущем состоянии.")
 
@@ -370,9 +599,15 @@ def register_admin_handlers(dp: Dispatcher) -> None:
     dp.message.register(cmd_user_payments, Command(Commands.USER_PAYMENTS))
     dp.message.register(cmd_all_message, Command(Commands.ALL_MESSAGE))
     dp.message.register(cmd_paid_message, Command(Commands.PAID_MESSAGE))
+    dp.message.register(cmd_add_balance, Command(Commands.ADD_BALANCE))
     dp.message.register(cmd_cancel, Command("cancel"))
 
     dp.message.register(process_all_message, BroadcastStates.waiting_for_all_message)
     dp.message.register(process_paid_message, BroadcastStates.waiting_for_paid_message)
+
+    dp.message.register(process_add_balance_telegram_id, AddBalanceStates.waiting_for_telegram_id)
+    dp.message.register(process_add_balance_amount, AddBalanceStates.waiting_for_amount)
+    dp.message.register(process_add_balance_notification_message, AddBalanceStates.waiting_for_notification_message)
+    dp.message.register(process_add_balance_confirmation, AddBalanceStates.waiting_for_confirmation)
 
     logger.info("Admin handlers registered")
