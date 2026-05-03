@@ -28,13 +28,41 @@ logger = logging.getLogger(__name__)
 MSK_TZ = ZoneInfo("Europe/Moscow")
 
 
-def _format_user_basic_info(user: "User", telegram_id: str, include_balance: bool = False) -> str:
+def _format_user_subscriptions_info(subscriptions: list[Subscription] | None) -> str:
+    """Format user subscriptions info for display.
+
+    Args:
+        subscriptions: List of Subscription instances (can be None).
+
+    Returns:
+        Formatted string with subscriptions info.
+    """
+    if not subscriptions:
+        return "\n📋 <b>Активных подписок нет</b>"
+
+    lines = [f"\n📋 <b>Активные подписки ({len(subscriptions)}):</b>"]
+    for sub in subscriptions:
+        sub_type = sub.subscription_type or "unknown"
+        end_date_msk = sub.end_date.astimezone(MSK_TZ)
+        end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M МСК")
+        lines.append(f"  • {sub_type}: до {end_date_str}")
+
+    return "\n".join(lines)
+
+
+def _format_user_basic_info(
+    user: "User",
+    telegram_id: str,
+    include_balance: bool = False,
+    subscriptions: list[Subscription] | None = None,
+) -> str:
     """Format basic user info for display.
 
     Args:
         user: User instance.
         telegram_id: User's Telegram ID.
         include_balance: Whether to include balance info.
+        subscriptions: List of user's active subscriptions (optional).
 
     Returns:
         Formatted string with basic user info.
@@ -46,6 +74,10 @@ def _format_user_basic_info(user: "User", telegram_id: str, include_balance: boo
     ]
     if include_balance:
         lines.append(f"💰 <b>Баланс:</b> {user.balance:.2f} RUB")
+
+    if subscriptions is not None:
+        lines.append(_format_user_subscriptions_info(subscriptions))
+
     return "\n".join(lines)
 
 
@@ -437,6 +469,7 @@ async def cmd_payment_by_external_id(message: Message) -> None:
         async with async_session_maker() as session:
             payment_repository = PaymentRepository(session)
             user_repository = UserRepository(session)
+            subscription_repository = SubscriptionRepository(session)
 
             payment = await payment_repository.get_by_external_id(external_id)
             if not payment:
@@ -448,11 +481,16 @@ async def cmd_payment_by_external_id(message: Message) -> None:
                 await message.answer("❌ Пользователь платежа не найден.")
                 return
 
+            subscriptions = await subscription_repository.get_active_subscriptions(user.id)
             payments = await payment_repository.get_user_payments(
                 user.id, status=None, limit=50
             )
 
-            info_lines = [_format_user_basic_info(user, user.telegram_id, include_balance=True)]
+            info_lines = [
+                _format_user_basic_info(
+                    user, user.telegram_id, include_balance=True, subscriptions=subscriptions
+                )
+            ]
             info_lines.append(_format_user_payments_info(payments, limit=10))
 
             await message.answer("\n".join(info_lines), parse_mode="HTML")
@@ -516,6 +554,7 @@ async def process_add_balance_telegram_id(message: Message, state: FSMContext) -
         async with async_session_maker() as session:
             user_repository = UserRepository(session)
             payment_repository = PaymentRepository(session)
+            subscription_repository = SubscriptionRepository(session)
 
             user = await user_repository.get_by_telegram_id(telegram_id)
             if not user:
@@ -526,11 +565,16 @@ async def process_add_balance_telegram_id(message: Message, state: FSMContext) -
 
             from src.models.payment import PaymentStatus
 
+            subscriptions = await subscription_repository.get_active_subscriptions(user.id)
             payments = await payment_repository.get_user_payments(
                 user.id, status=PaymentStatus.COMPLETED, limit=50
             )
 
-            info_lines = [_format_user_basic_info(user, telegram_id, include_balance=True)]
+            info_lines = [
+                _format_user_basic_info(
+                    user, telegram_id, include_balance=True, subscriptions=subscriptions
+                )
+            ]
 
             info_lines.append(_format_user_payments_info(payments, limit=5))
 
@@ -766,17 +810,11 @@ async def process_grant_subscription_telegram_id(message: Message, state: FSMCon
                 user.id, status=PaymentStatus.COMPLETED, limit=50
             )
 
-            info_lines = [_format_user_basic_info(user, telegram_id, include_balance=False)]
-
-            if subscriptions:
-                info_lines.append(f"\n📋 <b>Активные подписки ({len(subscriptions)}):</b>")
-                for sub in subscriptions:
-                    sub_type = sub.subscription_type or "unknown"
-                    end_date_msk = sub.end_date.astimezone(MSK_TZ)
-                    end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M МСК")
-                    info_lines.append(f"  • {sub_type}: до {end_date_str}")
-            else:
-                info_lines.append("\n📋 <b>Активных подписок нет</b>")
+            info_lines = [
+                _format_user_basic_info(
+                    user, telegram_id, include_balance=False, subscriptions=subscriptions
+                )
+            ]
 
             info_lines.append(_format_user_payments_info(payments, limit=5))
 
