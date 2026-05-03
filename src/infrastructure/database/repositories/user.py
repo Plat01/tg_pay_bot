@@ -18,6 +18,17 @@ class UserRepository(BaseRepository[User]):
         """Initialize user repository."""
         super().__init__(User, session)
 
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        """Get user by UUID ID.
+
+        Args:
+            user_id: User's UUID.
+
+        Returns:
+            User instance or None.
+        """
+        return await self.session.get(User, user_id)
+
     async def get_by_telegram_id(self, telegram_id: str) -> User | None:
         """Get user by Telegram ID."""
         statement = select(User).where(User.telegram_id == telegram_id)

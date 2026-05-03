@@ -146,10 +146,7 @@ async def cmd_deposit(message: Message, state: FSMContext) -> None:
         reply_markup=get_amount_keyboard(),
     )
 
-    logger.info(
-        f"User started deposit flow",
-        extra={"user_id": message.from_user.id},
-    )
+    logger.error(f"User started deposit flow: user_id={message.from_user.id}")
 
 
 async def process_amount_preset(callback: CallbackQuery, state: FSMContext) -> None:
@@ -264,15 +261,10 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
                 description=f"Пополнение баланса",
             )
 
-        logger.info(
-            f"Payment created for user",
-            extra={
-                "user_id": callback.from_user.id,
-                "payment_id": payment.id,
-                "external_id": result.external_id,
-                "amount": str(amount),
-                "method": payment_method.name,
-            },
+        logger.error(
+            f"Payment created for user: user_id={callback.from_user.id}, "
+            f"payment_id={payment.id}, external_id={result.external_id}, "
+            f"amount={amount}, method={payment_method.name}"
         )
 
         # Build success message
@@ -327,11 +319,7 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
 
     except Exception as e:
         logger.error(
-            f"Failed to create payment: {e}",
-            extra={
-                "user_id": callback.from_user.id,
-                "amount": str(amount),
-            },
+            f"Failed to create payment: {e} (user_id={callback.from_user.id}, amount={amount})"
         )
 
         await callback.message.edit_text(
@@ -426,13 +414,9 @@ async def cmd_check_payment(message: Message) -> None:
             parse_mode="HTML",
         )
 
-        logger.info(
-            "User checked payment status",
-            extra={
-                "user_id": message.from_user.id,
-                "payment_id": str(payment_id),
-                "status": payment.status.value,
-            },
+        logger.error(
+            f"User checked payment status: user_id={message.from_user.id}, "
+            f"payment_id={payment_id}, status={payment.status.value}"
         )
 
     except ValueError as e:

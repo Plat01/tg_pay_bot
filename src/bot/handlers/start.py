@@ -1,11 +1,8 @@
 """Start command handler for user registration and main menu handlers."""
 
+import html
 import logging
-from datetime import datetime
-from decimal import Decimal
 from zoneinfo import ZoneInfo
-
-logger = logging.getLogger(__name__)
 
 from aiogram import Dispatcher, F
 from aiogram.exceptions import TelegramBadRequest
@@ -60,9 +57,8 @@ async def cmd_start(message: Message) -> None:
         if subscriptions:
             subscription_status_list = []
             for i, sub in enumerate(subscriptions, 1):
-                product = getattr(sub, "product", None)
                 sub_info = subscription_service.get_subscription_info(sub)
-                sub_type = product.subscription_type if product else "unknown"
+                sub_type = sub.subscription_type or "unknown"
                 end_date_str = sub.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
                 time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
                 subscription_status_list.append(
@@ -105,9 +101,8 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
         if subscriptions:
             subscription_status_list = []
             for i, sub in enumerate(subscriptions, 1):
-                product = getattr(sub, "product", None)
                 sub_info = subscription_service.get_subscription_info(sub)
-                sub_type = product.subscription_type if product else "unknown"
+                sub_type = sub.subscription_type or "unknown"
                 end_date_str = sub.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
                 time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
                 subscription_status_list.append(
@@ -163,13 +158,13 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
         if user.last_name:
             name_parts.append(user.last_name)
         display_name = " ".join(name_parts) if name_parts else (user.username or f"#{user.id}")
+        display_name = html.escape(display_name)
 
         if subscriptions:
             subscriptions_list = []
             for i, sub in enumerate(subscriptions, 1):
-                product = getattr(sub, "product", None)
                 sub_info = subscription_service.get_subscription_info(sub)
-                sub_type = product.subscription_type if product else "unknown"
+                sub_type = sub.subscription_type or "unknown"
                 end_date_str = sub.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
                 time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
                 subscriptions_list.append(f"{i}. {sub_type} — до {end_date_str} ({time_left_str})")
@@ -501,12 +496,11 @@ async def handle_buy_subscription_callback(callback: CallbackQuery) -> None:
 
 async def handle_trial_activate_callback(callback: CallbackQuery) -> None:
     """Handle ✅ Начать button - activate trial subscription."""
-    from src.infrastructure.database.repositories import ProductRepository
+    from src.services.vpn_subscription import VpnSubscriptionService
 
     async with async_session_maker() as session:
         user_service = UserService(session)
         subscription_service = SubscriptionService(session)
-        product_repository = ProductRepository(session)
 
         user = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
 
@@ -529,21 +523,23 @@ async def handle_trial_activate_callback(callback: CallbackQuery) -> None:
             await callback.answer()
             return
 
-        trial_product = await product_repository.get_product_by_subscription_type("trial")
-        if not trial_product:
-            await callback.message.edit_text(
-                "❌ Тестовый VPN не найден. Обратитесь в поддержку.",
-                parse_mode="HTML",
-                reply_markup=Keyboards.error_with_support_link(),
-            )
-            await callback.answer()
-            return
-
-        await subscription_service.activate_trial(user.id)
+        subscription = await subscription_service.activate_trial(user.id)
         await user_service.mark_trial_used(user)
 
+        vpn_link = "VPN link pending"
+        try:
+            vpn_service = VpnSubscriptionService(session)
+            encrypted_sub = await vpn_service.create_trial_subscription(
+                user_id=user.id,
+                subscription_id=subscription.id,
+            )
+            vpn_link = encrypted_sub.encrypted_link
+            await vpn_service.close_client()
+        except Exception as e:
+            logger.error(f"Failed to create VPN subscription for trial: {e}")
+
         await callback.message.edit_text(
-            Texts.TRIAL_ACTIVATED.format(vpn_link=trial_product.happ_link),
+            Texts.TRIAL_ACTIVATED.format(vpn_link=vpn_link),
             parse_mode="HTML",
             reply_markup=Keyboards.subscription_success(),
         )
@@ -608,8 +604,12 @@ async def handle_deposit_history_callback(callback: CallbackQuery) -> None:
 
 async def handle_get_subscription_link_callback(callback: CallbackQuery) -> None:
     """Handle get_sub_link callback - show VPN link for specific subscription."""
+    from src.infrastructure.database.repositories import EncryptedSubscriptionRepository
+    from src.services.vpn_subscription import VpnSubscriptionService
+
     async with async_session_maker() as session:
         subscription_service = SubscriptionService(session)
+        encrypted_repository = EncryptedSubscriptionRepository(session)
 
         subscription_id_str = callback.data.split(":")[1] if callback.data else None
         if not subscription_id_str:
@@ -630,14 +630,46 @@ async def handle_get_subscription_link_callback(callback: CallbackQuery) -> None
             await callback.answer("❌ Подписка не найдена или истекла", show_alert=True)
             return
 
-        product = getattr(subscription, "product", None)
-        if not product:
-            await callback.answer("❌ Продукт подписки не найден", show_alert=True)
+        end_date_str = subscription.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
+        subscription_type = subscription.subscription_type
+        if not subscription_type:
+            vpn_link = "VPN link pending - обратитесь в поддержку"
+            await callback.message.edit_text(
+                Texts.SUBSCRIPTION_LINK.format(
+                    subscription_type="unknown",
+                    end_date=end_date_str,
+                    vpn_link=f"<code>{vpn_link}</code>",
+                ),
+                parse_mode="HTML",
+                reply_markup=Keyboards.subscription_success(),
+            )
+            await callback.answer()
             return
 
-        subscription_type = product.subscription_type
-        end_date_str = subscription.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
-        vpn_link = product.happ_link
+        vpn_link = None
+        encrypted_sub = await encrypted_repository.get_by_subscription_id(subscription_id)
+
+        if encrypted_sub:
+            vpn_link = encrypted_sub.encrypted_link
+        else:
+            try:
+                vpn_service = VpnSubscriptionService(session)
+                encrypted_sub = await vpn_service.get_or_create_for_subscription(
+                    subscription_id=subscription_id,
+                    tariff_type=subscription_type,
+                )
+                vpn_link = encrypted_sub.encrypted_link
+                await vpn_service.close_client()
+            except Exception as e:
+                logger.error(f"Failed to get VPN link for subscription {subscription_id}: {e}")
+                await callback.answer(
+                    "❌ Не удалось получить VPN ссылку. Попробуйте позже.",
+                    show_alert=True,
+                )
+                return
+
+        if not vpn_link:
+            vpn_link = "VPN link pending"
 
         await callback.message.edit_text(
             Texts.SUBSCRIPTION_LINK.format(

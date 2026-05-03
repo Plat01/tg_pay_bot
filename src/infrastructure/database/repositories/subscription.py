@@ -22,7 +22,10 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         """Get all active subscriptions for user by user ID (UUID)."""
         statement = (
             select(Subscription)
-            .options(selectinload(Subscription.product))
+            .options(
+                selectinload(Subscription.product),
+                selectinload(Subscription.encrypted_subscription),
+            )
             .where(Subscription.user_id == user_id)
             .where(Subscription.is_active)
             .where(Subscription.end_date > datetime.now(UTC))
@@ -35,7 +38,10 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         """Get subscription by ID (UUID)."""
         statement = (
             select(Subscription)
-            .options(selectinload(Subscription.product))
+            .options(
+                selectinload(Subscription.product),
+                selectinload(Subscription.encrypted_subscription),
+            )
             .where(Subscription.id == subscription_id)
         )
         result = await self.session.execute(statement)
@@ -50,7 +56,10 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         """
         statement = (
             select(Subscription)
-            .options(selectinload(Subscription.product))
+            .options(
+                selectinload(Subscription.product),
+                selectinload(Subscription.encrypted_subscription),
+            )
             .where(Subscription.id == subscription_id)
             .where(Subscription.is_active)
             .where(Subscription.end_date > datetime.now(UTC))
@@ -64,7 +73,10 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         """Get all subscriptions for user by user ID (UUID)."""
         statement = (
             select(Subscription)
-            .options(selectinload(Subscription.product))
+            .options(
+                selectinload(Subscription.product),
+                selectinload(Subscription.encrypted_subscription),
+            )
             .where(Subscription.user_id == user_id)
             .where(Subscription.is_active)  # Only include active subscriptions
             .order_by(desc(Subscription.created_at))
@@ -76,9 +88,10 @@ class SubscriptionRepository(BaseRepository[Subscription]):
     async def create_subscription(
         self,
         user_id: uuid.UUID,
-        product_id: uuid.UUID,
+        product_id: uuid.UUID | None,
         end_date: datetime,
         start_date: datetime,
+        subscription_type: str | None = None,
     ) -> Subscription:
         """Create a new subscription."""
         subscription_data = {
@@ -86,6 +99,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             "product_id": product_id,
             "end_date": end_date,
             "start_date": start_date,
+            "subscription_type": subscription_type,
         }
         return await self.create(subscription_data)
 
@@ -117,7 +131,11 @@ class SubscriptionRepository(BaseRepository[Subscription]):
 
         statement = (
             select(Subscription)
-            .options(selectinload(Subscription.product), selectinload(Subscription.user))
+            .options(
+                selectinload(Subscription.product),
+                selectinload(Subscription.user),
+                selectinload(Subscription.encrypted_subscription),
+            )
             .where(Subscription.is_active)
             .where(Subscription.end_date > window_start)
             .where(Subscription.end_date <= window_end)
@@ -136,7 +154,11 @@ class SubscriptionRepository(BaseRepository[Subscription]):
         """
         statement = (
             select(Subscription)
-            .options(selectinload(Subscription.product), selectinload(Subscription.user))
+            .options(
+                selectinload(Subscription.product),
+                selectinload(Subscription.user),
+                selectinload(Subscription.encrypted_subscription),
+            )
             .where(Subscription.is_active)
             .where(Subscription.end_date > datetime.now(UTC))
             .order_by(Subscription.end_date)

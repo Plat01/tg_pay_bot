@@ -191,13 +191,8 @@ class PlategaProvider(PaymentProvider):
             payload=payload_str,
         )
 
-        logger.info(
-            "Creating Platega payment",
-            extra={
-                "amount": str(amount),
-                "currency": currency,
-                "method": method.name,
-            },
+        logger.error(
+            f"Creating Platega payment: amount={amount}, currency={currency}, method={method.name}"
         )
 
         try:
@@ -259,13 +254,9 @@ class PlategaProvider(PaymentProvider):
                 expires_at = platega_response.get_expires_at()
                 expires_at_str = expires_at.isoformat() if expires_at else None
 
-                logger.info(
-                    "Platega payment created successfully",
-                    extra={
-                        "transaction_id": transaction_id,
-                        "payment_url": payment_url,
-                        "expires_at": expires_at_str,
-                    },
+                logger.error(
+                    f"Platega payment created successfully: transaction_id={transaction_id}, "
+                    f"payment_url={payment_url}, expires_at={expires_at_str}"
                 )
 
                 return PlategaCreatePaymentResult(
@@ -305,10 +296,7 @@ class PlategaProvider(PaymentProvider):
         """
         url = f"{self._api_url}/transaction/{payment_id}"
 
-        logger.info(
-            "Checking Platega payment status",
-            extra={"payment_id": payment_id},
-        )
+        logger.error(f"Checking Platega payment status: payment_id={payment_id}")
 
         try:
             session = await self._get_session()
@@ -340,13 +328,9 @@ class PlategaProvider(PaymentProvider):
                 amount = status_response.paymentDetails.amount
                 currency = status_response.paymentDetails.currency
 
-                logger.info(
-                    "Platega payment status retrieved",
-                    extra={
-                        "payment_id": payment_id,
-                        "status": status.value,
-                        "amount": str(amount),
-                    },
+                logger.error(
+                    f"Platega payment status retrieved: payment_id={payment_id}, "
+                    f"status={status.value}, amount={amount}"
                 )
 
                 return PaymentStatusResult(
@@ -427,13 +411,9 @@ class PlategaProvider(PaymentProvider):
 
             status = self._map_platega_status_str(status_str)
 
-            logger.info(
-                "Platega webhook parsed",
-                extra={
-                    "payment_id": payment_id,
-                    "status": status.value,
-                    "amount": str(amount),
-                },
+            logger.error(
+                f"Platega webhook parsed: payment_id={payment_id}, "
+                f"status={status.value}, amount={amount}"
             )
 
             return WebhookData(

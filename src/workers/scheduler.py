@@ -315,8 +315,7 @@ async def check_expiring_subscriptions_job() -> None:
                     )
                     continue
 
-                product = subscription.product
-                subscription_type = product.subscription_type if product else "unknown"
+                subscription_type = subscription.subscription_type or "unknown"
 
                 # Convert end_date to Moscow time
                 end_date_msk = subscription.end_date.astimezone(MSK_TZ)

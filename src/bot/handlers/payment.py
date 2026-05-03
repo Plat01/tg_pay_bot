@@ -65,13 +65,9 @@ async def handle_tariff_selection(callback: CallbackQuery) -> None:
     )
     await callback.answer()
 
-    logger.info(
-        f"User selected tariff",
-        extra={
-            "user_id": callback.from_user.id,
-            "tariff_type": tariff_type,
-            "amount": amount,
-        },
+    logger.error(
+        f"User selected tariff: user_id={callback.from_user.id}, "
+        f"tariff_type={tariff_type}, amount={amount}"
     )
 
 
@@ -122,18 +118,11 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
                 description=f"Подписка: {tariff_data['label']}",
             )
 
-            logger.info(
-                f"Payment created for subscription",
-                extra={
-                    "user_id": callback.from_user.id,
-                    "payment_id": payment.id,
-                    "external_id": result.external_id,
-                    "amount": str(amount),
-                    "method": payment_method.name,
-                    "tariff_type": tariff_type,
-                    "payment_url": result.payment_url,
-                    "has_payment_url": result.payment_url is not None and result.payment_url != "",
-                },
+            logger.error(
+                f"Payment created for subscription: user_id={callback.from_user.id}, "
+                f"payment_id={payment.id}, external_id={result.external_id}, "
+                f"amount={amount}, method={payment_method.name}, tariff_type={tariff_type}, "
+                f"payment_url={result.payment_url}"
             )
 
         method_names = {
@@ -158,14 +147,9 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
         )
 
     except ValueError as e:
-        # Specific error for empty external_id or validation errors
         logger.error(
-            f"Payment validation error: {e}",
-            extra={
-                "user_id": callback.from_user.id,
-                "amount": str(amount),
-                "method": payment_method.name,
-            },
+            f"Payment validation error: {e} "
+            f"(user_id={callback.from_user.id}, amount={amount}, method={payment_method.name})"
         )
 
         await callback.message.edit_text(
@@ -176,12 +160,8 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
 
     except Exception as e:
         logger.error(
-            f"Failed to create payment: {e}",
-            extra={
-                "user_id": callback.from_user.id,
-                "amount": str(amount),
-                "method": payment_method.name,
-            },
+            f"Failed to create payment: {e} "
+            f"(user_id={callback.from_user.id}, amount={amount}, method={payment_method.name})"
         )
 
         await callback.message.edit_text(
@@ -238,13 +218,9 @@ async def handle_confirm_payment(callback: CallbackQuery) -> None:
             if payment.status == PaymentStatus.PENDING and payment.external_id:
                 payment = await payment_service.check_and_update_status(payment)
 
-            logger.info(
-                f"Payment status checked",
-                extra={
-                    "user_id": callback.from_user.id,
-                    "payment_id": payment_id,
-                    "status": payment.status.value,
-                },
+            logger.error(
+                f"Payment status checked: user_id={callback.from_user.id}, "
+                f"payment_id={payment_id}, status={payment.status.value}"
             )
 
             if payment.status == PaymentStatus.COMPLETED:
@@ -253,14 +229,10 @@ async def handle_confirm_payment(callback: CallbackQuery) -> None:
                         payment, str(callback.from_user.id)
                     )
 
-                    logger.info(
-                        f"Subscription activated from payment",
-                        extra={
-                            "user_id": user.id,
-                            "payment_id": payment_id,
-                            "delivery_type": delivery_result.get("type"),
-                        },
-                    )
+                    logger.error(
+                    f"Subscription activated from payment: user_id={user.id}, "
+                    f"payment_id={payment_id}, delivery_type={delivery_result.get('type')}"
+                )
 
                     if delivery_result["type"] == "subscription":
                         await callback.message.edit_text(
@@ -348,8 +320,7 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
     """
     from src.services.user import UserService
     from src.services.subscription import SubscriptionService
-    from src.infrastructure.database.repositories import ProductRepository
-    from src.config import settings
+    from src.services.vpn_subscription import VpnSubscriptionService, TARIFF_DURATION
 
     try:
         tariff_type = callback.data.split(":")[1] if callback.data else None
@@ -362,7 +333,6 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
             user_service = UserService(session)
             payment_service = PaymentService(session)
             subscription_service = SubscriptionService(session)
-            product_repository = ProductRepository(session)
 
             tariff_data = await tariff_service.get_tariff_data(tariff_type)
             if not tariff_data:
@@ -376,7 +346,6 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
                 await callback.answer("❌ Пользователь не найден", show_alert=True)
                 return
 
-            # Check balance
             if user.balance < amount:
                 missing = amount - user.balance
                 await callback.message.edit_text(
@@ -392,7 +361,6 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
                 await callback.answer()
                 return
 
-            # Create payment with balance provider
             payment = await payment_service.create_payment(
                 telegram_id=str(callback.from_user.id),
                 amount=amount,
@@ -400,50 +368,53 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
                 description=f"Подписка: {tariff_data['label']} (с баланса)",
             )
 
-            # Update payment status to COMPLETED immediately
             payment = await payment_service.complete_payment(payment)
 
-            # Deduct balance (pass negative amount as change)
             await user_service.update_balance(user, -amount)
 
-            # Get user again to have updated balance after deduction
             user_updated = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
 
-            # Get product
-            product = await product_repository.get_product_by_subscription_type(tariff_type)
-            if not product:
+            if tariff_type not in TARIFF_DURATION:
                 await callback.message.edit_text(
-                    "❌ Продукт не найден. Обратитесь в поддержку.",
+                    "❌ Неверный тип тарифа. Обратитесь в поддержку.",
                     parse_mode="HTML",
                     reply_markup=Keyboards.error_with_support_link(),
                 )
                 await callback.answer()
                 return
 
-            # Create subscription
+            duration_days = TARIFF_DURATION[tariff_type]["days"]
+
             subscription = await subscription_service.create_subscription(
                 user_id=user.id,
-                product_id=product.id,
-                duration_days=product.duration_days,
+                subscription_type=tariff_type,
+                duration_days=duration_days,
             )
 
-            logger.info(
-                f"Subscription purchased with balance",
-                extra={
-                    "user_id": user.id,
-                    "payment_id": payment.id,
-                    "subscription_id": subscription.id,
-                    "amount": str(amount),
-                    "new_balance": str(user_updated.balance if user_updated else "unknown"),
-                },
+            vpn_link = "VPN link pending"
+            try:
+                vpn_service = VpnSubscriptionService(session)
+                encrypted_sub = await vpn_service.create_subscription_for_tariff(
+                    tariff_type=tariff_type,
+                    subscription_id=subscription.id,
+                )
+                vpn_link = encrypted_sub.encrypted_link
+                await vpn_service.close_client()
+            except Exception as e:
+                logger.error(f"Failed to create VPN subscription: {e}")
+
+            logger.error(
+                f"Subscription purchased with balance: user_id={user.id}, "
+                f"payment_id={payment.id}, subscription_id={subscription.id}, "
+                f"amount={amount}, new_balance={user_updated.balance if user_updated else 'unknown'}"
             )
 
             await callback.message.edit_text(
                 Texts.PAYMENT_BALANCE_SUCCESS.format(
                     amount=amount,
                     balance=user_updated.balance if user_updated else Decimal("0"),
-                    duration=product.duration_days,
-                    vpn_link=product.happ_link,
+                    duration=duration_days,
+                    vpn_link=vpn_link,
                 ),
                 parse_mode="HTML",
                 reply_markup=Keyboards.subscription_success(),

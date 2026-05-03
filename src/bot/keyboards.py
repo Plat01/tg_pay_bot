@@ -443,17 +443,15 @@ class Keyboards:
         """Subscription links keyboard with buttons for each subscription.
 
         Args:
-            subscriptions: List of Subscription objects with loaded product relationship.
+            subscriptions: List of Subscription objects.
 
         Returns:
             InlineKeyboardMarkup with buttons for each subscription link.
         """
         buttons = []
 
-        # Add button for each subscription
         for subscription in subscriptions:
-            product = getattr(subscription, "product", None)
-            subscription_type = product.subscription_type if product else "unknown"
+            subscription_type = subscription.subscription_type or "unknown"
             buttons.append(
                 [
                     InlineKeyboardButton(
@@ -463,7 +461,6 @@ class Keyboards:
                 ]
             )
 
-        # Add instruction button
         buttons.append(
             [
                 InlineKeyboardButton(
@@ -473,7 +470,6 @@ class Keyboards:
             ]
         )
 
-        # Add back button
         buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)])
 
         return InlineKeyboardMarkup(inline_keyboard=buttons)
