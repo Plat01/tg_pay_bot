@@ -4,22 +4,22 @@ import asyncio
 import logging
 from zoneinfo import ZoneInfo
 
-from aiogram import Dispatcher, F
+from aiogram import Dispatcher
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import Message
 
-from src.bot.constants import CallbackData, Commands
+from src.bot.constants import Commands
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import (
     PaymentRepository,
-    UserRepository,
     SubscriptionRepository,
+    UserRepository,
 )
 from src.models.subscription import Subscription
-from src.services.tariff import TariffService, DEFAULT_PRICES
+from src.services.subscription import TARIFF_DURATION_DAYS, SubscriptionService
 from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,14 @@ class AddBalanceStates(StatesGroup):
     waiting_for_telegram_id = State()
     waiting_for_amount = State()
     waiting_for_notification_message = State()
+    waiting_for_confirmation = State()
+
+
+class GrantSubscriptionStates(StatesGroup):
+    """States for granting subscription process."""
+
+    waiting_for_telegram_id = State()
+    waiting_for_subscription_type = State()
     waiting_for_confirmation = State()
 
 
@@ -186,7 +194,9 @@ async def cmd_subscriptions(message: Message) -> None:
     try:
         async with async_session_maker() as session:
             subscription_repository = SubscriptionRepository(session)
-            subscriptions = await subscription_repository.get_all_active_subscriptions_with_details()
+            subscriptions = (
+                await subscription_repository.get_all_active_subscriptions_with_details()
+            )
 
             if not subscriptions:
                 await message.answer("📋 Нет активных подписок.")
@@ -403,11 +413,14 @@ async def process_add_balance_telegram_id(message: Message, state: FSMContext) -
 
             user = await user_repository.get_by_telegram_id(telegram_id)
             if not user:
-                await message.answer(f"❌ Пользователь с Telegram ID {telegram_id} не найден.\nПопробуйте снова:")
+                await message.answer(
+                    f"❌ Пользователь с Telegram ID {telegram_id} не найден.\nПопробуйте снова:"
+                )
                 return
 
             # Получаем последние пополнения (completed/paid)
             from src.models.payment import PaymentStatus
+
             payments = await payment_repository.get_user_payments(
                 user.id, status=PaymentStatus.COMPLETED, limit=50
             )
@@ -432,7 +445,10 @@ async def process_add_balance_telegram_id(message: Message, state: FSMContext) -
 
             info_lines.append("\n\nВведите сумму для начисления (в рублях):")
 
-            await state.update_data(telegram_id=telegram_id, user_display=f"@{user.username}" if user.username else telegram_id)
+            await state.update_data(
+                telegram_id=telegram_id,
+                user_display=f"@{user.username}" if user.username else telegram_id,
+            )
             await state.set_state(AddBalanceStates.waiting_for_amount)
             await message.answer("\n".join(info_lines), parse_mode="HTML")
 
@@ -457,13 +473,10 @@ async def process_add_balance_amount(message: Message, state: FSMContext) -> Non
         return
 
     await state.update_data(amount=amount)
-    data = await state.get_data()
 
     # Шаблон сообщения для пользователя
     default_notification = (
-        f"💰 <b>Ваш баланс пополнен!</b>\n\n"
-        f"💵 Сумма: {amount:.2f} RUB\n\n"
-        f"Спасибо за доверие!"
+        f"💰 <b>Ваш баланс пополнен!</b>\n\n💵 Сумма: {amount:.2f} RUB\n\nСпасибо за доверие!"
     )
 
     await state.update_data(notification_message=default_notification)
@@ -475,7 +488,7 @@ async def process_add_balance_amount(message: Message, state: FSMContext) -> Non
         f"Вы можете скопировать и отредактировать его, или отправить как есть:\n\n"
         f"<code>{default_notification}</code>\n\n"
         f"Отправьте сообщение или введите 'да' чтобы использовать шаблон выше:",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
@@ -505,7 +518,7 @@ async def process_add_balance_notification_message(message: Message, state: FSMC
         f"📝 Сообщение для пользователя:\n"
         f"<code>{notification_message}</code>\n\n"
         f"Подтвердите начисление (да/нет):",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
@@ -568,7 +581,11 @@ async def _execute_add_balance(
                 notification_sent = False
 
             username = f"@{user.username}" if user.username else telegram_id
-            notification_status = "✅ Отправлено" if notification_sent else "❌ Не отправлено (блок или без сообщения)"
+            notification_status = (
+                "✅ Отправлено"
+                if notification_sent
+                else "❌ Не отправлено (блок или без сообщения)"
+            )
 
             await message.answer(
                 f"✅ <b>Баланс успешно пополнен!</b>\n\n"
@@ -578,14 +595,234 @@ async def _execute_add_balance(
                 f"📊 Было: {old_balance:.2f} RUB\n"
                 f"📊 Стало: {new_balance.balance:.2f} RUB\n"
                 f"📤 Уведомление: {notification_status}",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
 
-            logger.info(f"Admin added {amount} RUB to user {telegram_id} (balance: {old_balance} -> {new_balance.balance})")
+            logger.info(
+                f"Admin added {amount} RUB to user {telegram_id} "
+                f"(balance: {old_balance} -> {new_balance.balance})"
+            )
 
     except Exception as e:
         logger.error(f"Error adding balance: {e}")
         await message.answer(f"❌ Произошла ошибка при начислении баланса: {e}")
+
+
+async def cmd_grant_subscription(message: Message, state: FSMContext) -> None:
+    """Admin command to grant subscription to user by telegram ID.
+
+    Usage: /grant_subscription [telegram_id] [subscription_type]
+    If arguments provided, executes immediately.
+    Otherwise starts interactive process.
+    """
+    if not message.from_user:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    admin_id = str(message.from_user.id)
+    if admin_id not in settings.admin_id_list:
+        logger.warning(f"Non-admin user {admin_id} tried to access grant_subscription command")
+        await message.answer("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    parts = message.text.split() if message.text else []
+
+    if len(parts) >= 3:
+        telegram_id = parts[1].strip()
+        subscription_type = parts[2].strip().lower()
+
+        if subscription_type not in TARIFF_DURATION_DAYS:
+            valid_types = ", ".join(TARIFF_DURATION_DAYS.keys())
+            await message.answer(f"❌ Неверный тип подписки. Доступные типы: {valid_types}")
+            return
+
+        await _execute_grant_subscription(message, telegram_id, subscription_type)
+    else:
+        await state.set_state(GrantSubscriptionStates.waiting_for_telegram_id)
+        await message.answer(
+            "🎁 <b>Выдача подписки пользователю</b>\n\n"
+            "Введите Telegram ID пользователя:\n"
+            "Для отмены введите /cancel"
+        )
+        logger.info(f"Admin {admin_id} started grant_subscription process")
+
+
+async def process_grant_subscription_telegram_id(message: Message, state: FSMContext) -> None:
+    """Process telegram ID input for granting subscription."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте текст.")
+        return
+
+    telegram_id = message.text.strip()
+
+    try:
+        async with async_session_maker() as session:
+            user_repository = UserRepository(session)
+            subscription_repository = SubscriptionRepository(session)
+
+            user = await user_repository.get_by_telegram_id(telegram_id)
+            if not user:
+                await message.answer(
+                    f"❌ Пользователь с Telegram ID {telegram_id} не найден.\nПопробуйте снова:"
+                )
+                return
+
+            subscriptions = await subscription_repository.get_active_subscriptions(user.id)
+
+            username = f"@{user.username}" if user.username else "Без username"
+            info_lines = [
+                f"👤 <b>Пользователь найден:</b> {username}",
+                f"🆔 Telegram ID: {telegram_id}",
+            ]
+
+            if subscriptions:
+                info_lines.append(f"\n📋 <b>Активные подписки ({len(subscriptions)}):</b>")
+                for sub in subscriptions:
+                    sub_type = sub.subscription_type or "unknown"
+                    end_date_msk = sub.end_date.astimezone(MSK_TZ)
+                    end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M МСК")
+                    info_lines.append(f"  • {sub_type}: до {end_date_str}")
+            else:
+                info_lines.append("\n📋 <b>Активных подписок нет</b>")
+
+            info_lines.append("\n\n<b>Выберите тип подписки:</b>")
+            for sub_type, days in TARIFF_DURATION_DAYS.items():
+                info_lines.append(f"  /{sub_type} — {days} дней")
+
+            await state.update_data(
+                telegram_id=telegram_id,
+                user_display=f"@{user.username}" if user.username else telegram_id,
+            )
+            await state.set_state(GrantSubscriptionStates.waiting_for_subscription_type)
+            await message.answer("\n".join(info_lines), parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"Error finding user for grant_subscription: {e}")
+        await message.answer(f"❌ Ошибка при поиске пользователя: {e}")
+
+
+async def process_grant_subscription_type(message: Message, state: FSMContext) -> None:
+    """Process subscription type selection for granting subscription."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте текст.")
+        return
+
+    text = message.text.strip().lower()
+    sub_type = None
+
+    for valid_type in TARIFF_DURATION_DAYS.keys():
+        if text == f"/{valid_type}" or text == valid_type:
+            sub_type = valid_type
+            break
+
+    if not sub_type:
+        valid_types = ", ".join([f"/{t}" for t in TARIFF_DURATION_DAYS.keys()])
+        await message.answer(f"❌ Неверный тип подписки. Выберите из списка:\n{valid_types}")
+        return
+
+    await state.update_data(subscription_type=sub_type)
+    data = await state.get_data()
+
+    duration_days = TARIFF_DURATION_DAYS[sub_type]
+
+    await state.set_state(GrantSubscriptionStates.waiting_for_confirmation)
+    await message.answer(
+        f"⚠️ <b>Подтверждение выдачи подписки</b>\n\n"
+        f"👤 Пользователь: {data['user_display']}\n"
+        f"🆔 Telegram ID: {data['telegram_id']}\n"
+        f"📦 Тип подписки: {sub_type}\n"
+        f"⏱️ Длительность: {duration_days} дней\n\n"
+        f"Подтвердите выдачу (да/нет):",
+        parse_mode="HTML",
+    )
+
+
+async def process_grant_subscription_confirmation(message: Message, state: FSMContext) -> None:
+    """Process confirmation for granting subscription."""
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправьте текст.")
+        return
+
+    response = message.text.strip().lower()
+
+    if response not in ("да", "yes", "y", "д", "+"):
+        await state.clear()
+        await message.answer("❌ Выдача подписки отменена.")
+        return
+
+    data = await state.get_data()
+    telegram_id = data["telegram_id"]
+    subscription_type = data["subscription_type"]
+
+    await state.clear()
+    await _execute_grant_subscription(message, telegram_id, subscription_type)
+
+
+async def _execute_grant_subscription(
+    message: Message, telegram_id: str, subscription_type: str
+) -> None:
+    """Execute granting subscription and send notification to user."""
+    if not message.bot:
+        await message.answer("❌ Ошибка доступа к боту.")
+        return
+
+    try:
+        async with async_session_maker() as session:
+            user_repository = UserRepository(session)
+            subscription_service = SubscriptionService(session)
+
+            user = await user_repository.get_by_telegram_id(telegram_id)
+            if not user:
+                await message.answer(f"❌ Пользователь с Telegram ID {telegram_id} не найден.")
+                return
+
+            subscription = await subscription_service.create_subscription_by_type(
+                user_id=user.id,
+                subscription_type=subscription_type,
+            )
+
+            duration_days = TARIFF_DURATION_DAYS[subscription_type]
+            end_date_msk = subscription.end_date.astimezone(MSK_TZ)
+            end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M МСК")
+
+            notification_message = (
+                f"🎁 <b>Вам выдана подписка!</b>\n\n"
+                f"📦 Тип: {subscription_type}\n"
+                f"⏱️ Длительность: {duration_days} дней\n"
+                f"📅 Действует до: {end_date_str}\n\n"
+                f"Спасибо за доверие!"
+            )
+
+            notification_sent = False
+            try:
+                await message.bot.send_message(
+                    chat_id=telegram_id, text=notification_message, parse_mode="HTML"
+                )
+                notification_sent = True
+            except Exception as e:
+                logger.error(f"Failed to send notification to user {telegram_id}: {e}")
+
+            username = f"@{user.username}" if user.username else telegram_id
+            notification_status = (
+                "✅ Отправлено" if notification_sent else "❌ Не отправлено (блок)"
+            )
+
+            await message.answer(
+                f"✅ <b>Подписка успешно выдана!</b>\n\n"
+                f"👤 Пользователь: {username}\n"
+                f"🆔 Telegram ID: {telegram_id}\n"
+                f"📦 Тип подписки: {subscription_type}\n"
+                f"⏱️ Длительность: {duration_days} дней\n"
+                f"📅 Действует до: {end_date_str}\n"
+                f"📤 Уведомление: {notification_status}",
+                parse_mode="HTML",
+            )
+
+            logger.info(f"Admin granted {subscription_type} subscription to user {telegram_id}")
+
+    except Exception as e:
+        logger.error(f"Error granting subscription: {e}")
+        await message.answer(f"❌ Произошла ошибка при выдаче подписки: {e}")
 
 
 async def cmd_cancel(message: Message, state: FSMContext) -> None:
@@ -612,6 +849,9 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
         AddBalanceStates.waiting_for_amount,
         AddBalanceStates.waiting_for_notification_message,
         AddBalanceStates.waiting_for_confirmation,
+        GrantSubscriptionStates.waiting_for_telegram_id,
+        GrantSubscriptionStates.waiting_for_subscription_type,
+        GrantSubscriptionStates.waiting_for_confirmation,
     ]:
         await state.clear()
         await message.answer("❌ Процесс отменен.")
@@ -626,6 +866,7 @@ def register_admin_handlers(dp: Dispatcher) -> None:
     dp.message.register(cmd_all_message, Command(Commands.ALL_MESSAGE))
     dp.message.register(cmd_paid_message, Command(Commands.PAID_MESSAGE))
     dp.message.register(cmd_add_balance, Command(Commands.ADD_BALANCE))
+    dp.message.register(cmd_grant_subscription, Command(Commands.GRANT_SUBSCRIPTION))
     dp.message.register(cmd_cancel, Command("cancel"))
 
     dp.message.register(process_all_message, BroadcastStates.waiting_for_all_message)
@@ -633,7 +874,19 @@ def register_admin_handlers(dp: Dispatcher) -> None:
 
     dp.message.register(process_add_balance_telegram_id, AddBalanceStates.waiting_for_telegram_id)
     dp.message.register(process_add_balance_amount, AddBalanceStates.waiting_for_amount)
-    dp.message.register(process_add_balance_notification_message, AddBalanceStates.waiting_for_notification_message)
+    dp.message.register(
+        process_add_balance_notification_message, AddBalanceStates.waiting_for_notification_message
+    )
     dp.message.register(process_add_balance_confirmation, AddBalanceStates.waiting_for_confirmation)
+
+    dp.message.register(
+        process_grant_subscription_telegram_id, GrantSubscriptionStates.waiting_for_telegram_id
+    )
+    dp.message.register(
+        process_grant_subscription_type, GrantSubscriptionStates.waiting_for_subscription_type
+    )
+    dp.message.register(
+        process_grant_subscription_confirmation, GrantSubscriptionStates.waiting_for_confirmation
+    )
 
     logger.info("Admin handlers registered")

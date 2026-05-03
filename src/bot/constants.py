@@ -79,6 +79,7 @@ class Commands:
     SUBSCRIPTIONS = "subscriptions"
     USER_PAYMENTS = "payments"
     ADD_BALANCE = "add_balance"
+    GRANT_SUBSCRIPTION = "grant_subscription"
 
 
 class Limits:
