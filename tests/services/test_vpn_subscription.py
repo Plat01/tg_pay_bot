@@ -163,7 +163,10 @@ async def test_create_trial_subscription(mock_session, mock_repository, mock_api
         service = VpnSubscriptionService(mock_session)
         service.repository = mock_repository
 
-        result = await service.create_trial_subscription(user_id=uuid.uuid4())
+        result = await service.create_trial_subscription(
+            user_id=uuid.uuid4(),
+            subscription_id=uuid.uuid4(),
+        )
 
         assert result == new_sub
 

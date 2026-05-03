@@ -251,20 +251,22 @@ class VpnSubscriptionService:
     async def create_trial_subscription(
         self,
         user_id: uuid.UUID,
+        subscription_id: uuid.UUID,
     ) -> EncryptedSubscription:
-        """Create trial encrypted subscription (no linked Subscription record).
+        """Create trial encrypted subscription linked to a Subscription record.
 
-        Trial is a standalone encrypted subscription with 72 hours TTL.
+        Trial encrypted subscription with 72 hours TTL.
 
         Args:
-            user_id: User UUID (for logging purposes, not linked).
+            user_id: User UUID (for logging purposes).
+            subscription_id: Linked Subscription ID.
 
         Returns:
             EncryptedSubscription for trial.
         """
         return await self.create_subscription_for_tariff(
             tariff_type="trial",
-            subscription_id=None,
+            subscription_id=subscription_id,
             max_devices=1,
             info_block_text="Для продления подписки обратитесь в поддержку",
         )

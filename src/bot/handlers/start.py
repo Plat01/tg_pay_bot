@@ -529,7 +529,10 @@ async def handle_trial_activate_callback(callback: CallbackQuery) -> None:
         vpn_link = "VPN link pending"
         try:
             vpn_service = VpnSubscriptionService(session)
-            encrypted_sub = await vpn_service.create_trial_subscription(user.id)
+            encrypted_sub = await vpn_service.create_trial_subscription(
+                user_id=user.id,
+                subscription_id=subscription.id,
+            )
             vpn_link = encrypted_sub.encrypted_link
             await vpn_service.close_client()
         except Exception as e:
