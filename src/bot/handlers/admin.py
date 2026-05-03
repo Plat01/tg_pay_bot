@@ -436,13 +436,14 @@ async def cmd_payment_by_external_id(message: Message) -> None:
     try:
         async with async_session_maker() as session:
             payment_repository = PaymentRepository(session)
+            user_repository = UserRepository(session)
 
             payment = await payment_repository.get_by_external_id(external_id)
             if not payment:
                 await message.answer(f"❌ Платеж с external_id {external_id} не найден.")
                 return
 
-            user = payment.user
+            user = await user_repository.get_by_id(payment.user_id)
             if not user:
                 await message.answer("❌ Пользователь платежа не найден.")
                 return
