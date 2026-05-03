@@ -659,6 +659,7 @@ async def process_grant_subscription_telegram_id(message: Message, state: FSMCon
         async with async_session_maker() as session:
             user_repository = UserRepository(session)
             subscription_repository = SubscriptionRepository(session)
+            payment_repository = PaymentRepository(session)
 
             user = await user_repository.get_by_telegram_id(telegram_id)
             if not user:
@@ -668,6 +669,11 @@ async def process_grant_subscription_telegram_id(message: Message, state: FSMCon
                 return
 
             subscriptions = await subscription_repository.get_active_subscriptions(user.id)
+
+            from src.models.payment import PaymentStatus
+            payments = await payment_repository.get_user_payments(
+                user.id, status=PaymentStatus.COMPLETED, limit=50
+            )
 
             username = f"@{user.username}" if user.username else "Без username"
             info_lines = [
@@ -684,6 +690,16 @@ async def process_grant_subscription_telegram_id(message: Message, state: FSMCon
                     info_lines.append(f"  • {sub_type}: до {end_date_str}")
             else:
                 info_lines.append("\n📋 <b>Активных подписок нет</b>")
+
+            if payments:
+                info_lines.append(f"\n📊 <b>Последние пополнения ({len(payments)}):</b>")
+                for payment in payments:
+                    created_msk = payment.created_at.astimezone(MSK_TZ)
+                    created_str = created_msk.strftime("%d.%m.%Y %H:%M")
+                    desc = payment.description or "—"
+                    info_lines.append(f"  • {payment.amount:.2f} RUB — {desc} ({created_str})")
+            else:
+                info_lines.append("\n📊 <b>Пополнений нет</b>")
 
             info_lines.append("\n\n<b>Выберите тип подписки:</b>")
             for sub_type, days in TARIFF_DURATION_DAYS.items():
