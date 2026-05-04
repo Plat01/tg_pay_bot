@@ -9,29 +9,28 @@ This module provides business logic for payment operations:
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.tariff import TariffService
-from src.services.referral import ReferralService
-from src.services.vpn_subscription import VpnSubscriptionService, TARIFF_DURATION
 from src.config import settings
 from src.infrastructure.database.repositories import (
     PaymentRepository,
     UserRepository,
 )
 from src.infrastructure.payments import (
+    CreatePaymentResult,
     PaymentProvider,
     PaymentProviderFactory,
-    CreatePaymentResult,
     PlategaPaymentMethod,
 )
 from src.models.payment import Payment, PaymentStatus
-from src.models.user import User
+from src.services.referral import ReferralService
 from src.services.subscription import SubscriptionService
+from src.services.tariff import TariffService
+from src.services.vpn_subscription import TARIFF_DURATION, VpnSubscriptionService
 
 logger = logging.getLogger(__name__)
 
@@ -366,7 +365,7 @@ class PaymentService:
         payment = await self.repository.update_status(
             payment,
             PaymentStatus.COMPLETED,
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
         )
 
         # Process referral earnings only for external payments (not balance)
@@ -488,6 +487,7 @@ class PaymentService:
             encrypted_sub = await self.vpn_subscription_service.create_subscription_for_tariff(
                 tariff_type=tariff_type,
                 subscription_id=subscription.id,
+                end_date=subscription.end_date,
             )
             vpn_link = encrypted_sub.encrypted_link
             await self.vpn_subscription_service.close_client()

@@ -99,9 +99,10 @@ async def test_create_subscription_for_tariff_invalid_type(mock_session):
 
 @pytest.mark.asyncio
 async def test_get_or_create_for_subscription_existing(mock_session, mock_repository):
-    """Test get_or_create returns existing subscription."""
+    """Test get_or_create returns existing subscription when expires_at matches end_date."""
+    end_date = datetime.now(timezone.utc) + timedelta(days=30)
     existing_sub = MagicMock()
-    existing_sub.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    existing_sub.expires_at = end_date
 
     mock_repository.get_by_subscription_id = AsyncMock(return_value=existing_sub)
 
@@ -110,6 +111,7 @@ async def test_get_or_create_for_subscription_existing(mock_session, mock_reposi
 
     result = await service.get_or_create_for_subscription(
         subscription_id=uuid.uuid4(),
+        end_date=end_date,
         tariff_type="monthly",
     )
 
@@ -119,8 +121,9 @@ async def test_get_or_create_for_subscription_existing(mock_session, mock_reposi
 
 @pytest.mark.asyncio
 async def test_get_or_create_for_subscription_expired(mock_session, mock_repository, mock_api_response):
-    """Test get_or_create creates new when existing expired."""
+    """Test get_or_create creates new when existing expired or end_date mismatch."""
     subscription_id = uuid.uuid4()
+    end_date = datetime.now(timezone.utc) + timedelta(days=30)
     expired_sub = MagicMock()
     expired_sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
 
@@ -140,6 +143,7 @@ async def test_get_or_create_for_subscription_expired(mock_session, mock_reposit
 
         result = await service.get_or_create_for_subscription(
             subscription_id=subscription_id,
+            end_date=end_date,
             tariff_type="monthly",
         )
 
@@ -174,3 +178,69 @@ async def test_create_trial_subscription(mock_session, mock_repository, mock_api
         request = call_args[0][0]
         assert request.ttl_hours == 72
         assert request.tags == ["main"]
+
+
+@pytest.mark.asyncio
+async def test_create_subscription_with_end_date(mock_session, mock_repository, mock_api_response):
+    """Test subscription creation with specific end_date."""
+    end_date = datetime.now(timezone.utc) + timedelta(days=45)
+    new_sub = MagicMock()
+
+    with patch("src.services.vpn_subscription.VpnSubscriptionClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.create_encrypted_subscription = AsyncMock(return_value=mock_api_response)
+        mock_client_class.return_value = mock_client
+
+        mock_repository.create = AsyncMock(return_value=new_sub)
+
+        service = VpnSubscriptionService(mock_session)
+        service.repository = mock_repository
+
+        result = await service.create_subscription_for_tariff(
+            subscription_id=uuid.uuid4(),
+            end_date=end_date,
+        )
+
+        assert result == new_sub
+
+        call_args = mock_client.create_encrypted_subscription.call_args
+        request = call_args[0][0]
+        # TTL should be approximately 45 days = 1080 hours
+        assert request.ttl_hours >= 1079
+        assert request.ttl_hours <= 1081
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_recreates_when_end_date_mismatch(mock_session, mock_repository, mock_api_response):
+    """Test get_or_create recreates VPN link when expires_at doesn't match subscription end_date."""
+    subscription_id = uuid.uuid4()
+    # Subscription ends in 30 days
+    end_date = datetime.now(timezone.utc) + timedelta(days=30)
+    # But VPN link was created with wrong TTL (only 15 days)
+    mismatched_sub = MagicMock()
+    mismatched_sub.expires_at = datetime.now(timezone.utc) + timedelta(days=15)
+
+    new_sub = MagicMock()
+    new_sub.encrypted_link = "https://new.link"
+    new_sub.expires_at = end_date
+
+    with patch("src.services.vpn_subscription.VpnSubscriptionClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.create_encrypted_subscription = AsyncMock(return_value=mock_api_response)
+        mock_client_class.return_value = mock_client
+
+        mock_repository.get_by_subscription_id = AsyncMock(return_value=mismatched_sub)
+        mock_repository.create = AsyncMock(return_value=new_sub)
+
+        service = VpnSubscriptionService(mock_session)
+        service.repository = mock_repository
+
+        result = await service.get_or_create_for_subscription(
+            subscription_id=subscription_id,
+            end_date=end_date,
+            tariff_type="monthly",
+        )
+
+        assert result == new_sub
+        # Should have called API to create new subscription
+        mock_client.create_encrypted_subscription.assert_called_once()
