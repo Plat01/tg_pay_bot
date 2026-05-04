@@ -58,12 +58,6 @@ def get_payment_method_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🌍 Международная карта",
-                callback_data=f"method:{PlategaPaymentMethod.INTERNATIONAL}",
-            )
-        ],
-        [
-            InlineKeyboardButton(
                 text="❌ Отмена",
                 callback_data="method:cancel",
             )

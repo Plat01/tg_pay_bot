@@ -332,12 +332,6 @@ class Keyboards:
                 )
             ],
             [
-                InlineKeyboardButton(
-                    text="🌍 Международная карта",
-                    callback_data=f"payment_method:{PlategaPaymentMethod.INTERNATIONAL}:{tariff_type}",
-                )
-            ],
-            [
                 InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.BUY_SUBSCRIPTION),
             ],
         ]
