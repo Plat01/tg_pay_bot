@@ -20,7 +20,8 @@ from src.infrastructure.database.repositories import (
 )
 from src.models.subscription import Subscription
 from src.models.user import User
-from src.services.subscription import TARIFF_DURATION_DAYS, SubscriptionService
+from src.services.subscription import SubscriptionService
+from src.services.tariff import get_tariff_type_by_days
 from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
@@ -126,7 +127,7 @@ class GrantSubscriptionStates(StatesGroup):
     """States for granting subscription process."""
 
     waiting_for_telegram_id = State()
-    waiting_for_subscription_type = State()
+    waiting_for_days = State()
     waiting_for_confirmation = State()
 
 
@@ -788,7 +789,7 @@ async def _execute_add_balance(
 async def cmd_grant_subscription(message: Message, state: FSMContext) -> None:
     """Admin command to grant subscription to user by telegram ID.
 
-    Usage: /grant_subscription [telegram_id] [subscription_type]
+    Usage: /grant_subscription [telegram_id] [days]
     If arguments provided, executes immediately.
     Otherwise starts interactive process.
     """
@@ -806,14 +807,17 @@ async def cmd_grant_subscription(message: Message, state: FSMContext) -> None:
 
     if len(parts) >= 3:
         telegram_id = parts[1].strip()
-        subscription_type = parts[2].strip().lower()
-
-        if subscription_type not in TARIFF_DURATION_DAYS:
-            valid_types = ", ".join(TARIFF_DURATION_DAYS.keys())
-            await message.answer(f"❌ Неверный тип подписки. Доступные типы: {valid_types}")
+        try:
+            days = int(parts[2].strip())
+            if days <= 0:
+                await message.answer("❌ Количество дней должно быть положительным числом.")
+                return
+        except ValueError:
+            await message.answer("❌ Неверный формат дней. Укажите целое число.")
             return
 
-        await _execute_grant_subscription(message, telegram_id, subscription_type)
+        subscription_type = get_tariff_type_by_days(days)
+        await _execute_grant_subscription(message, telegram_id, subscription_type, days)
     else:
         await state.set_state(GrantSubscriptionStates.waiting_for_telegram_id)
         await message.answer(
@@ -860,15 +864,19 @@ async def process_grant_subscription_telegram_id(message: Message, state: FSMCon
 
             info_lines.append(_format_user_payments_info(payments, limit=5))
 
-            info_lines.append("\n\n<b>Выберите тип подписки:</b>")
-            for sub_type, days in TARIFF_DURATION_DAYS.items():
-                info_lines.append(f"  /{sub_type} — {days} дней")
+            info_lines.append(
+                "\n\n<b>Введите количество дней для подписки:</b>\n"
+                "• Меньше 4 дней = trial\n"
+                "• 4-29 дней = monthly\n"
+                "• 30-89 дней = quarterly\n"
+                "• 90+ дней = yearly"
+            )
 
             await state.update_data(
                 telegram_id=telegram_id,
                 user_display=f"@{user.username}" if user.username else telegram_id,
             )
-            await state.set_state(GrantSubscriptionStates.waiting_for_subscription_type)
+            await state.set_state(GrantSubscriptionStates.waiting_for_days)
             await message.answer("\n".join(info_lines), parse_mode="HTML")
 
     except Exception as e:
@@ -876,37 +884,38 @@ async def process_grant_subscription_telegram_id(message: Message, state: FSMCon
         await message.answer(f"❌ Ошибка при поиске пользователя: {e}")
 
 
-async def process_grant_subscription_type(message: Message, state: FSMContext) -> None:
-    """Process subscription type selection for granting subscription."""
+async def process_grant_subscription_days(message: Message, state: FSMContext) -> None:
+    """Process days input for granting subscription."""
     if not message.text:
         await message.answer("❌ Пожалуйста, отправьте текст.")
         return
 
-    text = message.text.strip().lower()
-    sub_type = None
-
-    for valid_type in TARIFF_DURATION_DAYS.keys():
-        if text == f"/{valid_type}" or text == valid_type:
-            sub_type = valid_type
-            break
-
-    if not sub_type:
-        valid_types = ", ".join([f"/{t}" for t in TARIFF_DURATION_DAYS.keys()])
-        await message.answer(f"❌ Неверный тип подписки. Выберите из списка:\n{valid_types}")
+    try:
+        days = int(message.text.strip())
+        if days <= 0:
+            await message.answer(
+                "❌ Количество дней должно быть положительным числом. "
+                "Попробуйте снова:"
+            )
+            return
+    except ValueError:
+        await message.answer("❌ Неверный формат. Введите целое число дней:")
         return
 
-    await state.update_data(subscription_type=sub_type)
+    subscription_type = get_tariff_type_by_days(days)
+
+    await state.update_data(days=days, subscription_type=subscription_type)
     data = await state.get_data()
 
-    duration_days = TARIFF_DURATION_DAYS[sub_type]
+    subscription_type_label = get_subscription_type_label(subscription_type)
 
     await state.set_state(GrantSubscriptionStates.waiting_for_confirmation)
     await message.answer(
         f"⚠️ <b>Подтверждение выдачи подписки</b>\n\n"
         f"👤 Пользователь: {data['user_display']}\n"
         f"🆔 Telegram ID: {data['telegram_id']}\n"
-        f"📦 Тип подписки: {sub_type}\n"
-        f"⏱️ Длительность: {duration_days} дней\n\n"
+        f"📦 Тип подписки: {subscription_type_label}\n"
+        f"⏱️ Длительность: {days} дней\n\n"
         f"Подтвердите выдачу (да/нет):",
         parse_mode="HTML",
     )
@@ -928,13 +937,14 @@ async def process_grant_subscription_confirmation(message: Message, state: FSMCo
     data = await state.get_data()
     telegram_id = data["telegram_id"]
     subscription_type = data["subscription_type"]
+    days = data["days"]
 
     await state.clear()
-    await _execute_grant_subscription(message, telegram_id, subscription_type)
+    await _execute_grant_subscription(message, telegram_id, subscription_type, days)
 
 
 async def _execute_grant_subscription(
-    message: Message, telegram_id: str, subscription_type: str
+    message: Message, telegram_id: str, subscription_type: str, days: int
 ) -> None:
     """Execute granting subscription and send notification to user."""
     if not message.bot:
@@ -951,12 +961,12 @@ async def _execute_grant_subscription(
                 await message.answer(f"❌ Пользователь с Telegram ID {telegram_id} не найден.")
                 return
 
-            subscription = await subscription_service.create_subscription_by_type(
+            subscription = await subscription_service.create_subscription(
                 user_id=user.id,
                 subscription_type=subscription_type,
+                duration_days=days,
             )
 
-            duration_days = TARIFF_DURATION_DAYS[subscription_type]
             end_date_msk = subscription.end_date.astimezone(MSK_TZ)
             end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M МСК")
             subscription_type_label = get_subscription_type_label(subscription_type)
@@ -964,7 +974,7 @@ async def _execute_grant_subscription(
             notification_message = (
                 f"🎁 <b>Вам выдана подписка!</b>\n\n"
                 f"📦 Тип: {subscription_type_label}\n"
-                f"⏱️ Длительность: {duration_days} дней\n"
+                f"⏱️ Длительность: {days} дней\n"
                 f"📅 Действует до: {end_date_str}\n\n"
                 f"Спасибо за доверие!"
             )
@@ -988,13 +998,16 @@ async def _execute_grant_subscription(
                 f"👤 Пользователь: {username}\n"
                 f"🆔 Telegram ID: {telegram_id}\n"
                 f"📦 Тип подписки: {subscription_type_label}\n"
-                f"⏱️ Длительность: {duration_days} дней\n"
+                f"⏱️ Длительность: {days} дней\n"
                 f"📅 Действует до: {end_date_str}\n"
                 f"📤 Уведомление: {notification_status}",
                 parse_mode="HTML",
             )
 
-            logger.info(f"Admin granted {subscription_type} subscription to user {telegram_id}")
+            logger.info(
+                f"Admin granted {subscription_type} subscription "
+                f"({days} days) to user {telegram_id}"
+            )
 
     except Exception as e:
         logger.error(f"Error granting subscription: {e}")
@@ -1026,7 +1039,7 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
         AddBalanceStates.waiting_for_notification_message,
         AddBalanceStates.waiting_for_confirmation,
         GrantSubscriptionStates.waiting_for_telegram_id,
-        GrantSubscriptionStates.waiting_for_subscription_type,
+        GrantSubscriptionStates.waiting_for_days,
         GrantSubscriptionStates.waiting_for_confirmation,
     ]:
         await state.clear()
@@ -1060,7 +1073,7 @@ def register_admin_handlers(dp: Dispatcher) -> None:
         process_grant_subscription_telegram_id, GrantSubscriptionStates.waiting_for_telegram_id
     )
     dp.message.register(
-        process_grant_subscription_type, GrantSubscriptionStates.waiting_for_subscription_type
+        process_grant_subscription_days, GrantSubscriptionStates.waiting_for_days
     )
     dp.message.register(
         process_grant_subscription_confirmation, GrantSubscriptionStates.waiting_for_confirmation

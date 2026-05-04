@@ -1,23 +1,20 @@
 """Subscription service for business logic."""
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.database.repositories import SubscriptionRepository, EncryptedSubscriptionRepository
-from src.models.subscription import Subscription
+from src.infrastructure.database.repositories import (
+    EncryptedSubscriptionRepository,
+    SubscriptionRepository,
+)
 from src.models.encrypted_subscription import EncryptedSubscription
+from src.models.subscription import Subscription
+from src.services.tariff import TARIFF_DURATION_DAYS
 
 MSK_TZ = ZoneInfo("Europe/Moscow")
-
-TARIFF_DURATION_DAYS = {
-    "trial": 3,
-    "monthly": 30,
-    "quarterly": 90,
-    "yearly": 365,
-}
 
 
 class SubscriptionService:
@@ -151,7 +148,7 @@ class SubscriptionService:
         Returns:
             Dictionary with subscription info.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         time_left = subscription.end_date - now
 
         days_left = time_left.days
