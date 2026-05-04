@@ -75,12 +75,19 @@ class TariffService:
             "trial": "3 дня (тест)",
             "monthly": "1 месяц",
             "quarterly": "3 месяца",
-            "yearly": "12 месяцев",
+            "yearly": "1 год",
+        }
+        devices_text = {
+            "trial": "1 устройство",
+            "monthly": "1 устройство",
+            "quarterly": "1 устройство",
+            "yearly": "1 устройство",
         }
         duration = duration_text.get(tariff_type, f"{DEFAULT_PRICES.get(tariff_type, {}).get('days', 0)} дней")
+        devices = devices_text.get(tariff_type, "1 устройство")
         if price == 0:
-            return f"{duration} — Бесплатно"
-        return f"{duration} — {int(price)} ₽"
+            return f"{duration} | {devices} • Бесплатно"
+        return f"{duration} | {devices} • {int(price)} RUB"
 
     async def get_tariff_data(self, tariff_type: str) -> Dict[str, Any] | None:
         """Get tariff data by type.
