@@ -8,6 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from src.bot.bot import bot
+from src.bot.constants import get_subscription_type_label
 from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
 from src.config import settings
@@ -372,6 +373,7 @@ async def check_expiring_subscriptions_job() -> None:
                     continue
 
                 subscription_type = subscription.subscription_type or "unknown"
+                subscription_type_label = get_subscription_type_label(subscription_type)
 
                 # Convert end_date to Moscow time
                 end_date_msk = subscription.end_date.astimezone(MSK_TZ)
@@ -381,7 +383,7 @@ async def check_expiring_subscriptions_job() -> None:
                     user.telegram_id,
                     Texts.SUBSCRIPTION_EXPIRING.format(
                         end_date=f"{end_date_str} (МСК)",
-                        subscription_type=subscription_type,
+                        subscription_type=subscription_type_label,
                     ),
                     parse_mode="HTML",
                     reply_markup=Keyboards.main_menu(show_trial_button=False),

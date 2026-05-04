@@ -10,7 +10,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.bot.constants import CallbackData
+from src.bot.constants import CallbackData, get_subscription_type_label
 from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
 from src.config import settings
@@ -59,10 +59,11 @@ async def cmd_start(message: Message) -> None:
             for i, sub in enumerate(subscriptions, 1):
                 sub_info = subscription_service.get_subscription_info(sub)
                 sub_type = sub.subscription_type or "unknown"
+                sub_type_label = get_subscription_type_label(sub_type)
                 end_date_str = sub.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
                 time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
                 subscription_status_list.append(
-                    f"{i}. {sub_type} — до {end_date_str} ({time_left_str})"
+                    f"{i}. {sub_type_label} — до {end_date_str} ({time_left_str})"
                 )
             subscription_status = "\n".join(subscription_status_list)
             show_trial_button = False
@@ -103,10 +104,11 @@ async def handle_main_menu_callback(callback: CallbackQuery) -> None:
             for i, sub in enumerate(subscriptions, 1):
                 sub_info = subscription_service.get_subscription_info(sub)
                 sub_type = sub.subscription_type or "unknown"
+                sub_type_label = get_subscription_type_label(sub_type)
                 end_date_str = sub.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
                 time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
                 subscription_status_list.append(
-                    f"{i}. {sub_type} — до {end_date_str} ({time_left_str})"
+                    f"{i}. {sub_type_label} — до {end_date_str} ({time_left_str})"
                 )
             subscription_status = "\n".join(subscription_status_list)
             show_trial_button = False
@@ -165,9 +167,12 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
             for i, sub in enumerate(subscriptions, 1):
                 sub_info = subscription_service.get_subscription_info(sub)
                 sub_type = sub.subscription_type or "unknown"
+                sub_type_label = get_subscription_type_label(sub_type)
                 end_date_str = sub.end_date.astimezone(MSK_TZ).strftime("%d.%m.%Y %H:%M")
                 time_left_str = f"{sub_info['days_left']} дн. / {sub_info['hours_left']} час."
-                subscriptions_list.append(f"{i}. {sub_type} — до {end_date_str} ({time_left_str})")
+                subscriptions_list.append(
+                    f"{i}. {sub_type_label} — до {end_date_str} ({time_left_str})"
+                )
 
             profile_text = Texts.PROFILE_MULTIPLE_SUBSCRIPTIONS.format(
                 username=display_name,
@@ -635,7 +640,7 @@ async def handle_get_subscription_link_callback(callback: CallbackQuery) -> None
             vpn_link = "VPN link pending - обратитесь в поддержку"
             await callback.message.edit_text(
                 Texts.SUBSCRIPTION_LINK.format(
-                    subscription_type="unknown",
+                    subscription_type=get_subscription_type_label("unknown"),
                     end_date=end_date_str,
                     vpn_link=f"<code>{vpn_link}</code>",
                 ),
@@ -665,7 +670,7 @@ async def handle_get_subscription_link_callback(callback: CallbackQuery) -> None
 
         await callback.message.edit_text(
             Texts.SUBSCRIPTION_LINK.format(
-                subscription_type=subscription_type,
+                subscription_type=get_subscription_type_label(subscription_type),
                 end_date=end_date_str,
                 vpn_link=f"<code>{vpn_link}</code>",
             ),

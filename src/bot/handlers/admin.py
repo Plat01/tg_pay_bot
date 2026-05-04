@@ -10,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
-from src.bot.constants import Commands
+from src.bot.constants import Commands, get_subscription_type_label
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import (
@@ -43,9 +43,10 @@ def _format_user_subscriptions_info(subscriptions: list[Subscription] | None) ->
     lines = [f"\n📋 <b>Активные подписки ({len(subscriptions)}):</b>"]
     for sub in subscriptions:
         sub_type = sub.subscription_type or "unknown"
+        sub_type_label = get_subscription_type_label(sub_type)
         end_date_msk = sub.end_date.astimezone(MSK_TZ)
         end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M МСК")
-        lines.append(f"  • {sub_type}: до {end_date_str}")
+        lines.append(f"  • {sub_type_label}: до {end_date_str}")
 
     return "\n".join(lines)
 
@@ -339,9 +340,10 @@ async def cmd_subscriptions(message: Message) -> None:
 
                 for sub in subs:
                     sub_type = sub.subscription_type or "unknown"
+                    sub_type_label = get_subscription_type_label(sub_type)
                     end_date_msk = sub.end_date.astimezone(MSK_TZ)
                     end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M МСК")
-                    lines.append(f"  • {sub_type}: до {end_date_str}")
+                    lines.append(f"  • {sub_type_label}: до {end_date_str}")
 
             full_message = "\n".join(lines)
             if len(full_message) <= 4096:
@@ -957,10 +959,11 @@ async def _execute_grant_subscription(
             duration_days = TARIFF_DURATION_DAYS[subscription_type]
             end_date_msk = subscription.end_date.astimezone(MSK_TZ)
             end_date_str = end_date_msk.strftime("%d.%m.%Y %H:%M МСК")
+            subscription_type_label = get_subscription_type_label(subscription_type)
 
             notification_message = (
                 f"🎁 <b>Вам выдана подписка!</b>\n\n"
-                f"📦 Тип: {subscription_type}\n"
+                f"📦 Тип: {subscription_type_label}\n"
                 f"⏱️ Длительность: {duration_days} дней\n"
                 f"📅 Действует до: {end_date_str}\n\n"
                 f"Спасибо за доверие!"
@@ -984,7 +987,7 @@ async def _execute_grant_subscription(
                 f"✅ <b>Подписка успешно выдана!</b>\n\n"
                 f"👤 Пользователь: {username}\n"
                 f"🆔 Telegram ID: {telegram_id}\n"
-                f"📦 Тип подписки: {subscription_type}\n"
+                f"📦 Тип подписки: {subscription_type_label}\n"
                 f"⏱️ Длительность: {duration_days} дней\n"
                 f"📅 Действует до: {end_date_str}\n"
                 f"📤 Уведомление: {notification_status}",
