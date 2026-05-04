@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     bot_link: str = "https://t.me/testAiogram12Bot"  # Link to the bot for referral links
     bot_name: str = "testAiogram12Bot"  # Name of the bot for display in messages
     support_link: str = "https://t.me/support"  # Link to support channel/chat
+    channel_link: str = ""  # Link to Telegram channel (empty = no button shown)
 
     # Legal links
     privacy_policy_link: str = "https://telegra.ph/Politika-konfidencialnosti-08-15-17"

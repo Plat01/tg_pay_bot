@@ -54,6 +54,13 @@ class Keyboards:
                 )
             )
 
+        if settings.channel_link:
+            buttons.append(
+                [
+                    InlineKeyboardButton(text="📣 Наш канал", url=settings.channel_link),
+                ]
+            )
+
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     # Info menu keyboard with legal links
