@@ -144,7 +144,10 @@ async def cmd_all_message(message: Message, state: FSMContext) -> None:
     await state.set_state(BroadcastStates.waiting_for_all_message)
     await message.answer(
         "📢 <b>Рассылка всем пользователям</b>\n\n"
-        "Введите сообщение, которое будет отправлено всем пользователям:\n"
+        "Отправьте сообщение (текст, фото или видео):\n"
+        "• Текст — будет отправлен как текстовое сообщение\n"
+        "• Фото — будет отправлено с подписью (caption)\n"
+        "• Видео — будет отправлено с подписью (caption)\n\n"
         "Для отмены введите /cancel"
     )
     logger.info(f"Admin {user_id} started broadcast to all users")
@@ -165,7 +168,10 @@ async def cmd_paid_message(message: Message, state: FSMContext) -> None:
     await state.set_state(BroadcastStates.waiting_for_paid_message)
     await message.answer(
         "📢 <b>Рассылка пользователям с платной подпиской</b>\n\n"
-        "Введите сообщение, которое будет отправлено пользователям с активной платной подпиской:\n"
+        "Отправьте сообщение (текст, фото или видео):\n"
+        "• Текст — будет отправлен как текстовое сообщение\n"
+        "• Фото — будет отправлено с подписью (caption)\n"
+        "• Видео — будет отправлено с подписью (caption)\n\n"
         "Для отмены введите /cancel"
     )
     logger.info(f"Admin {user_id} started broadcast to paid users")
@@ -173,15 +179,15 @@ async def cmd_paid_message(message: Message, state: FSMContext) -> None:
 
 async def process_all_message(message: Message, state: FSMContext) -> None:
     """Process and send broadcast message to all users."""
-    if not message.text:
-        await message.answer("❌ Пожалуйста, отправьте сообщение текстом.")
-        return
-
     if not message.bot:
         await message.answer("❌ Ошибка доступа к боту.")
         return
 
-    broadcast_text = message.text.strip()
+    broadcast_text = message.caption or message.text
+    if not broadcast_text and not message.photo and not message.video:
+        await message.answer("❌ Пожалуйста, отправьте текст, фото или видео.")
+        return
+
     sent_count = 0
     error_count = 0
 
@@ -190,13 +196,30 @@ async def process_all_message(message: Message, state: FSMContext) -> None:
             user_repository = UserRepository(session)
             users = await user_repository.get_all_users()
 
-            await message.answer(f"📤 Начинаю рассылку {len(users)} пользователям...")
+            media_type = "фото" if message.photo else "видео" if message.video else "текст"
+            await message.answer(f"📤 Начинаю рассылку {len(users)} пользователям ({media_type})...")
 
             for user in users:
                 try:
-                    await message.bot.send_message(
-                        chat_id=user.telegram_id, text=broadcast_text, parse_mode="HTML"
-                    )
+                    if message.photo:
+                        photo = message.photo[-1]
+                        await message.bot.send_photo(
+                            chat_id=user.telegram_id,
+                            photo=photo.file_id,
+                            caption=broadcast_text,
+                            parse_mode="HTML",
+                        )
+                    elif message.video:
+                        await message.bot.send_video(
+                            chat_id=user.telegram_id,
+                            video=message.video.file_id,
+                            caption=broadcast_text,
+                            parse_mode="HTML",
+                        )
+                    else:
+                        await message.bot.send_message(
+                            chat_id=user.telegram_id, text=broadcast_text, parse_mode="HTML"
+                        )
                     sent_count += 1
                 except Exception as e:
                     logger.error(f"Failed to send message to user {user.telegram_id}: {e}")
@@ -215,15 +238,15 @@ async def process_all_message(message: Message, state: FSMContext) -> None:
 
 async def process_paid_message(message: Message, state: FSMContext) -> None:
     """Process and send broadcast message to users with paid subscription."""
-    if not message.text:
-        await message.answer("❌ Пожалуйста, отправьте сообщение текстом.")
-        return
-
     if not message.bot:
         await message.answer("❌ Ошибка доступа к боту.")
         return
 
-    broadcast_text = message.text.strip()
+    broadcast_text = message.caption or message.text
+    if not broadcast_text and not message.photo and not message.video:
+        await message.answer("❌ Пожалуйста, отправьте текст, фото или видео.")
+        return
+
     sent_count = 0
     error_count = 0
 
@@ -232,15 +255,32 @@ async def process_paid_message(message: Message, state: FSMContext) -> None:
             user_repository = UserRepository(session)
             users = await user_repository.get_users_with_active_subscription()
 
+            media_type = "фото" if message.photo else "видео" if message.video else "текст"
             await message.answer(
-                f"📤 Начинаю рассылку {len(users)} пользователям с платной подпиской..."
+                f"📤 Начинаю рассылку {len(users)} пользователям с платной подпиской ({media_type})..."
             )
 
             for user in users:
                 try:
-                    await message.bot.send_message(
-                        chat_id=user.telegram_id, text=broadcast_text, parse_mode="HTML"
-                    )
+                    if message.photo:
+                        photo = message.photo[-1]
+                        await message.bot.send_photo(
+                            chat_id=user.telegram_id,
+                            photo=photo.file_id,
+                            caption=broadcast_text,
+                            parse_mode="HTML",
+                        )
+                    elif message.video:
+                        await message.bot.send_video(
+                            chat_id=user.telegram_id,
+                            video=message.video.file_id,
+                            caption=broadcast_text,
+                            parse_mode="HTML",
+                        )
+                    else:
+                        await message.bot.send_message(
+                            chat_id=user.telegram_id, text=broadcast_text, parse_mode="HTML"
+                        )
                     sent_count += 1
                 except Exception as e:
                     logger.error(f"Failed to send message to user {user.telegram_id}: {e}")
