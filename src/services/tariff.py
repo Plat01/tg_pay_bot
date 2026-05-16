@@ -108,9 +108,9 @@ class TariffService:
         }
         devices_text = {
             "trial": "1 устройство",
-            "monthly": "1 устройство",
-            "quarterly": "1 устройство",
-            "yearly": "1 устройство",
+            "monthly": "2 устройства",
+            "quarterly": "2 устройства",
+            "yearly": "2 устройства",
         }
         duration = duration_text.get(tariff_type, f"{DEFAULT_PRICES.get(tariff_type, {}).get('days', 0)} дней")
         devices = devices_text.get(tariff_type, "1 устройство")
