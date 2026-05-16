@@ -225,7 +225,7 @@ class PaymentService:
                 f"error_message={external_result.error_message}"
             )
             raise ValueError(
-                "Платеж не создан: провайдер вернул пустый external_id. "
+                "Платеж не создан: провайдер вернул пустой external_id. "
                 "Попробуйте еще раз или выберите другой способ оплаты."
             )
 
