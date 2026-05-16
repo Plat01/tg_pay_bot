@@ -5,21 +5,19 @@ through sub-oval.online API.
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.infrastructure.database.repositories import EncryptedSubscriptionRepository
 from src.infrastructure.vpn_subscription import (
-    VpnSubscriptionClient,
     VpnSubscriptionApiError,
+    VpnSubscriptionClient,
     VpnSubscriptionConnectionError,
 )
 from src.infrastructure.vpn_subscription.schemas import (
     CreateEncryptedSubscriptionRequest,
-    EncryptedSubscriptionResponse,
     ExpireNotificationRequest,
     InfoBlockRequest,
     SubscriptionBehaviorRequest,
@@ -37,7 +35,7 @@ TARIFF_DURATION = {
     "yearly": {"days": 365, "hours": 8760},
 }
 
-UTC = timezone.utc
+UTC = UTC
 
 
 class VpnSubscriptionService:
@@ -132,18 +130,21 @@ class VpnSubscriptionService:
 
     async def create_subscription_for_tariff(
         self,
-        tariff_type: str,
+        tariff_type: str | None = None,
         subscription_id: uuid.UUID | None = None,
         max_devices: int | None = None,
         info_block_text: str | None = None,
+        end_date: datetime | None = None,
     ) -> EncryptedSubscription:
-        """Create encrypted subscription for a tariff type.
+        """Create encrypted subscription for a tariff type or specific end_date.
 
         Args:
             tariff_type: Subscription type (trial, monthly, quarterly, yearly).
+                Used if end_date not provided.
             subscription_id: Linked subscription ID (optional for trial).
             max_devices: Override max devices limit.
             info_block_text: Override info block text.
+            end_date: Specific end date. If provided, overrides tariff_type TTL.
 
         Returns:
             EncryptedSubscription model instance saved to database.
@@ -151,13 +152,25 @@ class VpnSubscriptionService:
         Raises:
             VpnSubscriptionApiError: API error.
             VpnSubscriptionConnectionError: Cannot connect to API.
-            ValueError: Invalid tariff type.
+            ValueError: Invalid tariff type or neither tariff_type nor end_date provided.
         """
-        if tariff_type not in TARIFF_DURATION:
-            raise ValueError(f"Invalid tariff type: {tariff_type}")
+        # Calculate TTL from end_date or tariff_type
+        if end_date:
+            now = datetime.now(UTC)
+            if end_date <= now:
+                raise ValueError(f"end_date must be in the future: {end_date}")
+            ttl_seconds = (end_date - now).total_seconds()
+            ttl_hours = max(1, int(ttl_seconds / 3600))
+            expires_at = end_date
+        elif tariff_type:
+            if tariff_type not in TARIFF_DURATION:
+                raise ValueError(f"Invalid tariff type: {tariff_type}")
+            duration = TARIFF_DURATION[tariff_type]
+            ttl_hours = duration["hours"]
+            expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
+        else:
+            raise ValueError("Either tariff_type or end_date must be provided")
 
-        duration = TARIFF_DURATION[tariff_type]
-        ttl_hours = duration["hours"]
         max_devices = max_devices or settings.default_max_devices
 
         client = self._get_client()
@@ -176,9 +189,6 @@ class VpnSubscriptionService:
             response = await client.create_encrypted_subscription(request)
         except (VpnSubscriptionApiError, VpnSubscriptionConnectionError) as e:
             raise e
-
-        # Calculate expires_at from ttl_hours
-        expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
 
         # Save to database
         encrypted_sub = await self.repository.create({
@@ -200,17 +210,18 @@ class VpnSubscriptionService:
     async def get_or_create_for_subscription(
         self,
         subscription_id: uuid.UUID,
-        tariff_type: str,
+        end_date: datetime,
+        tariff_type: str | None = None,
         max_devices: int | None = None,
     ) -> EncryptedSubscription:
         """Get existing encrypted subscription or create new one.
 
-        Lazy migration: if no encrypted subscription exists for the subscription,
-        create one via API.
+        Checks if existing VPN link matches subscription end_date. If not, creates new one.
 
         Args:
             subscription_id: Subscription UUID.
-            tariff_type: Subscription type for TTL calculation.
+            end_date: Subscription end date from Subscription record.
+            tariff_type: Subscription type (optional, for metadata defaults).
             max_devices: Override max devices limit.
 
         Returns:
@@ -218,31 +229,41 @@ class VpnSubscriptionService:
         """
         existing = await self.repository.get_by_subscription_id(subscription_id)
 
-        if existing and existing.expires_at > datetime.now(UTC):
-            return existing
+        # Check if existing VPN link matches subscription end_date (with 1 hour tolerance)
+        now = datetime.now(UTC)
+        if existing:
+            time_diff = abs((existing.expires_at - end_date).total_seconds())
+            # If VPN link expires at the same time as subscription and is still valid
+            if time_diff <= 3600 and existing.expires_at > now:
+                return existing
 
+        # Create new VPN link with correct end_date
         return await self.create_subscription_for_tariff(
             tariff_type=tariff_type,
             subscription_id=subscription_id,
             max_devices=max_devices,
+            end_date=end_date,
         )
 
     async def get_link_for_subscription(
         self,
         subscription_id: uuid.UUID,
-        tariff_type: str,
+        end_date: datetime,
+        tariff_type: str | None = None,
     ) -> str:
         """Get encrypted link for subscription (lazy creation).
 
         Args:
             subscription_id: Subscription UUID.
-            tariff_type: Subscription type for TTL calculation.
+            end_date: Subscription end date from Subscription record.
+            tariff_type: Subscription type (optional, for metadata defaults).
 
         Returns:
             Encrypted subscription link for user.
         """
         encrypted_sub = await self.get_or_create_for_subscription(
             subscription_id=subscription_id,
+            end_date=end_date,
             tariff_type=tariff_type,
         )
 
@@ -252,29 +273,31 @@ class VpnSubscriptionService:
         self,
         user_id: uuid.UUID,
         subscription_id: uuid.UUID,
+        end_date: datetime | None = None,
     ) -> EncryptedSubscription:
         """Create trial encrypted subscription linked to a Subscription record.
-
-        Trial encrypted subscription with 72 hours TTL.
 
         Args:
             user_id: User UUID (for logging purposes).
             subscription_id: Linked Subscription ID.
+            end_date: Subscription end date. If not provided, uses default trial TTL (72 hours).
 
         Returns:
             EncryptedSubscription for trial.
         """
         return await self.create_subscription_for_tariff(
-            tariff_type="trial",
+            tariff_type="trial" if not end_date else None,
             subscription_id=subscription_id,
             max_devices=1,
             info_block_text="Для продления подписки обратитесь в поддержку",
+            end_date=end_date,
         )
 
     async def refresh_subscription_link(
         self,
         subscription_id: uuid.UUID,
-        tariff_type: str,
+        end_date: datetime,
+        tariff_type: str | None = None,
     ) -> EncryptedSubscription:
         """Refresh encrypted subscription link.
 
@@ -283,7 +306,8 @@ class VpnSubscriptionService:
 
         Args:
             subscription_id: Subscription UUID.
-            tariff_type: Subscription type for TTL calculation.
+            end_date: Subscription end date from Subscription record.
+            tariff_type: Subscription type (optional, for metadata defaults).
 
         Returns:
             New EncryptedSubscription (old one remains in history).
@@ -291,6 +315,7 @@ class VpnSubscriptionService:
         return await self.create_subscription_for_tariff(
             tariff_type=tariff_type,
             subscription_id=subscription_id,
+            end_date=end_date,
         )
 
     async def cleanup_expired(self, older_than_days: int = 30) -> int:

@@ -5,7 +5,7 @@ Prices are stored in DEFAULT_PRICES and can be overridden via database
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,35 @@ DEFAULT_PRICES = {
     "yearly": {"price": 1999.0, "days": 365},
 }
 
+TARIFF_DURATION_DAYS = {
+    tariff_type: data["days"] for tariff_type, data in DEFAULT_PRICES.items()
+}
+
+
+def get_tariff_type_by_days(days: int) -> str:
+    """Determine subscription type based on duration days.
+
+    Rules:
+    - days < 4: trial
+    - 4 <= days < 30: monthly
+    - 30 <= days < 90: quarterly
+    - 90+ days: yearly
+
+    Args:
+        days: Number of subscription days.
+
+    Returns:
+        Subscription type string.
+    """
+    if days < 4:
+        return "trial"
+    elif days < 30:
+        return "monthly"
+    elif days < 90:
+        return "quarterly"
+    else:
+        return "yearly"
+
 
 class TariffService:
     """Service for managing subscription tariffs.
@@ -24,9 +53,9 @@ class TariffService:
     In future can be extended to load from database (tariff_settings table).
     """
 
-    _cache: Dict[str, Dict[str, Any]] = {}
+    _cache: dict[str, dict[str, Any]] = {}
 
-    def __init__(self, session=None):
+    def __init__(self, session: Any = None) -> None:
         """Initialize service.
 
         Args:
@@ -75,14 +104,21 @@ class TariffService:
             "trial": "3 дня (тест)",
             "monthly": "1 месяц",
             "quarterly": "3 месяца",
-            "yearly": "12 месяцев",
+            "yearly": "1 год",
+        }
+        devices_text = {
+            "trial": "1 устройство",
+            "monthly": "2 устройства",
+            "quarterly": "2 устройства",
+            "yearly": "2 устройства",
         }
         duration = duration_text.get(tariff_type, f"{DEFAULT_PRICES.get(tariff_type, {}).get('days', 0)} дней")
+        devices = devices_text.get(tariff_type, "1 устройство")
         if price == 0:
-            return f"{duration} — Бесплатно"
-        return f"{duration} — {int(price)} ₽"
+            return f"{duration} | {devices} • Бесплатно"
+        return f"{duration} | {devices} • {int(price)} RUB"
 
-    async def get_tariff_data(self, tariff_type: str) -> Dict[str, Any] | None:
+    async def get_tariff_data(self, tariff_type: str) -> dict[str, Any] | None:
         """Get tariff data by type.
 
         Returns cached data or default values if not found.
@@ -101,7 +137,7 @@ class TariffService:
 
         return None
 
-    async def get_all_tariffs(self) -> Dict[str, Dict[str, Any]]:
+    async def get_all_tariffs(self) -> dict[str, dict[str, Any]]:
         """Get all tariffs (from cache + defaults)."""
         result = {}
 

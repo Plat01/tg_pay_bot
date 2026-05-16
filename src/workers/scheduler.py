@@ -4,9 +4,11 @@ import logging
 from datetime import UTC, datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from src.bot.bot import bot
+from src.bot.constants import get_subscription_type_label
 from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
 from src.config import settings
@@ -275,6 +277,61 @@ async def notify_user_payment_completed(
         )
 
 
+async def deactivate_expired_subscriptions_job() -> None:
+    """Job to deactivate subscriptions where end_date has passed.
+
+    Runs daily at 00:05 MSK to clean up expired subscriptions.
+    """
+    from sqlalchemy import select
+
+    from src.models.subscription import Subscription
+
+    logger.info("Starting expired subscriptions deactivation job")
+
+    async with async_session_maker() as session:
+        stmt = (
+            select(Subscription)
+            .where(Subscription.is_active)
+            .where(Subscription.end_date < datetime.now(UTC))
+        )
+        result = await session.execute(stmt)
+        expired_subscriptions = list(result.scalars().all())
+
+        if not expired_subscriptions:
+            logger.info("No expired subscriptions found")
+            return
+
+        logger.info(
+            f"Found {len(expired_subscriptions)} expired subscriptions to deactivate",
+            extra={"count": len(expired_subscriptions)},
+        )
+
+        for subscription in expired_subscriptions:
+            try:
+                subscription.is_active = False
+                session.add(subscription)
+                logger.info(
+                    "Deactivated subscription",
+                    extra={
+                        "subscription_id": str(subscription.id),
+                        "user_id": str(subscription.user_id),
+                        "end_date": subscription.end_date.isoformat(),
+                    },
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to deactivate subscription: {e}",
+                    extra={"subscription_id": str(subscription.id)},
+                    exc_info=True,
+                )
+
+        await session.commit()
+        logger.info(
+            f"Deactivated {len(expired_subscriptions)} expired subscriptions",
+            extra={"deactivated_count": len(expired_subscriptions)},
+        )
+
+
 async def check_expiring_subscriptions_job() -> None:
     """Job to check and notify users about expiring subscriptions.
 
@@ -316,6 +373,7 @@ async def check_expiring_subscriptions_job() -> None:
                     continue
 
                 subscription_type = subscription.subscription_type or "unknown"
+                subscription_type_label = get_subscription_type_label(subscription_type)
 
                 # Convert end_date to Moscow time
                 end_date_msk = subscription.end_date.astimezone(MSK_TZ)
@@ -325,7 +383,7 @@ async def check_expiring_subscriptions_job() -> None:
                     user.telegram_id,
                     Texts.SUBSCRIPTION_EXPIRING.format(
                         end_date=f"{end_date_str} (МСК)",
-                        subscription_type=subscription_type,
+                        subscription_type=subscription_type_label,
                     ),
                     parse_mode="HTML",
                     reply_markup=Keyboards.main_menu(show_trial_button=False),
@@ -389,6 +447,18 @@ def setup_scheduler() -> None:
     logger.info(
         f"Subscription expiry checker job scheduled every {expiry_check_interval_hours} hours"
     )
+
+    # Daily job to deactivate expired subscriptions at 00:05 MSK (21:05 UTC)
+    scheduler.add_job(
+        deactivate_expired_subscriptions_job,
+        trigger=CronTrigger(hour=21, minute=5, timezone=UTC),
+        id="subscription_deactivator",
+        name="Deactivate expired subscriptions",
+        max_instances=1,
+        replace_existing=True,
+    )
+
+    logger.info("Subscription deactivator job scheduled daily at 00:05 MSK")
 
 
 def start_scheduler() -> None:

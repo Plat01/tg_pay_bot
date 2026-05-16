@@ -119,3 +119,26 @@ class Emoji:
     USER = "👤"
     CALENDAR = "📅"
     DEVICES = "📱"
+
+
+SUBSCRIPTION_TYPE_LABELS = {
+    "trial": "Триал",
+    "monthly": "Месячная",
+    "quarterly": "Квартальная",
+    "yearly": "Годовая",
+    "unknown": "Неизвестно",
+}
+
+
+def get_subscription_type_label(subscription_type: str | None) -> str:
+    """Get Russian label for subscription type.
+
+    Args:
+        subscription_type: Subscription type in English (trial, monthly, etc.)
+
+    Returns:
+        Russian label for subscription type.
+    """
+    if not subscription_type:
+        return SUBSCRIPTION_TYPE_LABELS["unknown"]
+    return SUBSCRIPTION_TYPE_LABELS.get(subscription_type, subscription_type)

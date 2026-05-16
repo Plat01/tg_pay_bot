@@ -4,13 +4,14 @@ This module contains all keyboard layouts for the Telegram bot.
 """
 
 import uuid
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from src.bot.constants import CallbackData
-from src.services.tariff import TariffService
-from src.infrastructure.database import async_session_maker
+from src.bot.constants import CallbackData, get_subscription_type_label
 from src.config import settings
+from src.infrastructure.database import async_session_maker
 from src.infrastructure.payments.schemas import PlategaPaymentMethod
+from src.services.tariff import TariffService
 
 
 class Keyboards:
@@ -51,6 +52,13 @@ class Keyboards:
                 InlineKeyboardButton(
                     text="🧪 Тестовый период", callback_data=CallbackData.TRIAL_SUBSCRIPTION
                 )
+            )
+
+        if settings.channel_link:
+            buttons.append(
+                [
+                    InlineKeyboardButton(text="📣 Наш канал", url=settings.channel_link),
+                ]
             )
 
         return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -332,12 +340,6 @@ class Keyboards:
                 )
             ],
             [
-                InlineKeyboardButton(
-                    text="🌍 Международная карта",
-                    callback_data=f"payment_method:{PlategaPaymentMethod.INTERNATIONAL}:{tariff_type}",
-                )
-            ],
-            [
                 InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.BUY_SUBSCRIPTION),
             ],
         ]
@@ -452,10 +454,11 @@ class Keyboards:
 
         for subscription in subscriptions:
             subscription_type = subscription.subscription_type or "unknown"
+            subscription_type_label = get_subscription_type_label(subscription_type)
             buttons.append(
                 [
                     InlineKeyboardButton(
-                        text=f"🔗 {subscription_type}",
+                        text=f"🔗 {subscription_type_label}",
                         callback_data=f"{CallbackData.GET_SUBSCRIPTION_LINK}:{subscription.id}",
                     )
                 ]
