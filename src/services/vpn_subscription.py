@@ -26,14 +26,9 @@ from src.infrastructure.vpn_subscription.schemas import (
     VpnTag,
 )
 from src.models.encrypted_subscription import EncryptedSubscription
+from src.services.tariff import TARIFF_DURATION
 
-# Mapping tariff type to duration in days and hours
-TARIFF_DURATION = {
-    "trial": {"days": 3, "hours": 72},
-    "monthly": {"days": 30, "hours": 720},
-    "quarterly": {"days": 90, "hours": 2160},
-    "yearly": {"days": 365, "hours": 8760},
-}
+# TARIFF_DURATION (days/hours per tariff) is re-exported from src.services.tariff
 
 UTC = UTC
 

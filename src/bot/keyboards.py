@@ -7,7 +7,7 @@ import uuid
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from src.bot.constants import CallbackData, get_subscription_type_label
+from src.bot.constants import TARIFF_CALLBACKS, CallbackData, get_subscription_type_label
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.payments.schemas import PlategaPaymentMethod
@@ -282,33 +282,21 @@ class Keyboards:
             tariff_service = TariffService(session)
             tariffs = await tariff_service.get_all_tariffs()
 
-        monthly_data = tariffs.get("monthly")
-        quarterly_data = tariffs.get("quarterly")
-        yearly_data = tariffs.get("yearly")
-
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=monthly_data["label"] if monthly_data else "1 месяц — 199 ₽",
-                        callback_data=CallbackData.TARIFF_1_MONTH,
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text=quarterly_data["label"] if quarterly_data else "3 месяца — 499 ₽",
-                        callback_data=CallbackData.TARIFF_3_MONTHS,
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text=yearly_data["label"] if yearly_data else "12 месяцев — 1999 ₽",
-                        callback_data=CallbackData.TARIFF_12_MONTHS,
-                    )
-                ],
-                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=tariffs[tariff_type]["label"],
+                    callback_data=callback_data,
+                )
             ]
+            for tariff_type, callback_data in TARIFF_CALLBACKS.items()
+            if tariff_type in tariffs
+        ]
+        buttons.append(
+            [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)]
         )
+
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     @staticmethod
     def payment_methods(tariff_type: str) -> InlineKeyboardMarkup:

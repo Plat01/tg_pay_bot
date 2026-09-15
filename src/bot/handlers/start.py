@@ -17,7 +17,7 @@ from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.models.payment import PaymentStatus
 from src.services.subscription import SubscriptionService
-from src.services.tariff import TariffService
+from src.services.tariff import TARIFFS, TariffService
 from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
@@ -207,24 +207,28 @@ async def handle_profile_callback(callback: CallbackQuery) -> None:
         await callback.answer()
 
 
-async def handle_pay_callback(callback: CallbackQuery) -> None:
-    """Handle 💳 Оплатить button from main menu."""
+async def _build_tariff_list_text(header: str) -> str:
+    """Build tariff selection text with prices from the tariff table."""
     async with async_session_maker() as session:
         tariff_service = TariffService(session)
         tariffs = await tariff_service.get_all_tariffs()
 
-    monthly_price = int(tariffs.get("monthly", {}).get("price", 199))
-    quarterly_price = int(tariffs.get("quarterly", {}).get("price", 499))
-    yearly_price = int(tariffs.get("yearly", {}).get("price", 1999))
+    lines = "".join(
+        f"• {TARIFFS[tariff_type]['duration_text']} — {int(data['price'])} ₽\n"
+        for tariff_type, data in tariffs.items()
+    )
 
-    pay_text = (
-        "💳 <b>Оплата подписки</b>\n\n"
+    return (
+        f"{header}\n\n"
         "Выберите тарифный план:\n\n"
-        f"• 1 месяц — {monthly_price} ₽\n"
-        f"• 3 месяца — {quarterly_price} ₽\n"
-        f"• 12 месяцев — {yearly_price} ₽\n\n"
+        f"{lines}\n"
         "Для покупки выберите тариф."
     )
+
+
+async def handle_pay_callback(callback: CallbackQuery) -> None:
+    """Handle 💳 Оплатить button from main menu."""
+    pay_text = await _build_tariff_list_text("💳 <b>Оплата подписки</b>")
 
     await callback.message.edit_text(
         pay_text,
@@ -474,22 +478,7 @@ async def handle_trial_subscription_callback(callback: CallbackQuery) -> None:
 
 async def handle_buy_subscription_callback(callback: CallbackQuery) -> None:
     """Handle 💎 Купить подписку button from main menu."""
-    async with async_session_maker() as session:
-        tariff_service = TariffService(session)
-        tariffs = await tariff_service.get_all_tariffs()
-
-    monthly_price = int(tariffs.get("monthly", {}).get("price", 199))
-    quarterly_price = int(tariffs.get("quarterly", {}).get("price", 499))
-    yearly_price = int(tariffs.get("yearly", {}).get("price", 1999))
-
-    buy_text = (
-        "💎 <b>Купить подписку</b>\n\n"
-        "Выберите тарифный план:\n\n"
-        f"• 1 месяц — {monthly_price} ₽\n"
-        f"• 3 месяца — {quarterly_price} ₽\n"
-        f"• 12 месяцев — {yearly_price} ₽\n\n"
-        "Для покупки выберите тариф."
-    )
+    buy_text = await _build_tariff_list_text("💎 <b>Купить подписку</b>")
 
     await callback.message.edit_text(
         buy_text,

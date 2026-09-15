@@ -16,7 +16,7 @@ from aiogram import Dispatcher, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from src.bot.constants import CallbackData
+from src.bot.constants import CALLBACK_TARIFFS
 from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
 from src.services.tariff import TariffService
@@ -36,13 +36,7 @@ async def handle_tariff_selection(callback: CallbackQuery) -> None:
     Args:
         callback: Telegram callback query.
     """
-    tariff_type_map = {
-        CallbackData.TARIFF_1_MONTH: "monthly",
-        CallbackData.TARIFF_3_MONTHS: "quarterly",
-        CallbackData.TARIFF_12_MONTHS: "yearly",
-    }
-
-    tariff_type = tariff_type_map.get(callback.data)
+    tariff_type = CALLBACK_TARIFFS.get(callback.data)
     if not tariff_type:
         await callback.answer("❌ Неверный тариф", show_alert=True)
         return
@@ -446,15 +440,7 @@ def register_payment_handlers(dp: Dispatcher) -> None:
     """
     dp.callback_query.register(
         handle_tariff_selection,
-        F.data == CallbackData.TARIFF_1_MONTH,
-    )
-    dp.callback_query.register(
-        handle_tariff_selection,
-        F.data == CallbackData.TARIFF_3_MONTHS,
-    )
-    dp.callback_query.register(
-        handle_tariff_selection,
-        F.data == CallbackData.TARIFF_12_MONTHS,
+        F.data.in_(set(CALLBACK_TARIFFS)),
     )
 
     dp.callback_query.register(

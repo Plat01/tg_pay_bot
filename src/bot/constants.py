@@ -4,6 +4,8 @@ All callback data strings, command names, and other constants
 are centralized here to avoid typos and ensure consistency.
 """
 
+from src.services.tariff import TARIFF_LABELS
+
 
 class CallbackData:
     """Callback data constants for inline keyboards."""
@@ -44,7 +46,7 @@ class CallbackData:
     BUY_SUBSCRIPTION = "buy_subscription"
     GET_SUBSCRIPTION_LINK = "get_sub_link"  # Format: get_sub_link:{subscription_id}
 
-    # Tariffs
+    # Tariffs (see TARIFF_CALLBACKS for the tariff type mapping)
     TARIFF_1_MONTH = "tariff_1_month"
     TARIFF_3_MONTHS = "tariff_3_months"
     TARIFF_12_MONTHS = "tariff_12_months"
@@ -121,13 +123,17 @@ class Emoji:
     DEVICES = "📱"
 
 
-SUBSCRIPTION_TYPE_LABELS = {
-    "trial": "Триал",
-    "monthly": "Месячная",
-    "quarterly": "Квартальная",
-    "yearly": "Годовая",
-    "unknown": "Неизвестно",
+# Tariff type -> callback data, in display order.
+TARIFF_CALLBACKS = {
+    "monthly": CallbackData.TARIFF_1_MONTH,
+    "quarterly": CallbackData.TARIFF_3_MONTHS,
+    "yearly": CallbackData.TARIFF_12_MONTHS,
 }
+
+# Callback data -> tariff type.
+CALLBACK_TARIFFS = {callback: tariff for tariff, callback in TARIFF_CALLBACKS.items()}
+
+SUBSCRIPTION_TYPE_LABELS = {**TARIFF_LABELS, "unknown": "Неизвестно"}
 
 
 def get_subscription_type_label(subscription_type: str | None) -> str:
