@@ -29,8 +29,8 @@ from src.infrastructure.payments import (
 from src.models.payment import Payment, PaymentStatus
 from src.services.referral import ReferralService
 from src.services.subscription import SubscriptionService
-from src.services.tariff import TariffService
-from src.services.vpn_subscription import TARIFF_DURATION, VpnSubscriptionService
+from src.services.tariff import TariffService, get_tariff_days
+from src.services.vpn_subscription import VpnSubscriptionService
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +170,7 @@ class PaymentService:
         payment_method: PlategaPaymentMethod = PlategaPaymentMethod.SBP_QR,
         return_url: str | None = None,
         failed_url: str | None = None,
+        extra_metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> tuple[Payment, CreatePaymentResult]:
         """Create payment via provider and save to database.
@@ -187,6 +188,8 @@ class PaymentService:
             payment_method: Payment method (default: SBP_QR).
             return_url: Redirect URL after success.
             failed_url: Redirect URL after failure.
+            extra_metadata: Extra fields stored with the payment record
+                (e.g. tariff_type/tariff_days for subscription payments).
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -229,6 +232,8 @@ class PaymentService:
             )
 
         # Save to database
+        payment_metadata = {**(external_result.metadata or {}), **(extra_metadata or {})}
+
         payment = await self.create_payment(
             telegram_id=telegram_id,
             amount=amount,
@@ -236,7 +241,7 @@ class PaymentService:
             description=description,
             payment_provider=self.provider_name,
             external_id=external_result.external_id,
-            payment_metadata=external_result.metadata,
+            payment_metadata=payment_metadata or None,
         )
 
         logger.error(
@@ -464,16 +469,22 @@ class PaymentService:
         Raises:
             ValueError: If tariff not found
         """
-        tariff_service = TariffService(self.session)
-        tariff_type = await tariff_service.get_tariff_by_price(int(payment.amount))
+        metadata = payment.payment_metadata or {}
+        tariff_type = metadata.get("tariff_type")
+
+        if not tariff_type:
+            # Payments created before tariff metadata was stored: match by amount
+            tariff_service = TariffService(self.session)
+            tariff_type = await tariff_service.get_tariff_by_price(int(payment.amount))
 
         if not tariff_type:
             raise ValueError(f"Cannot determine tariff for amount {payment.amount}")
 
-        if tariff_type not in TARIFF_DURATION:
+        # Days are taken from the payment so that a later tariff edit does not
+        # change what an already paid subscription is worth
+        duration_days = metadata.get("tariff_days") or get_tariff_days(tariff_type)
+        if not duration_days:
             raise ValueError(f"Invalid tariff type: {tariff_type}")
-
-        duration_days = TARIFF_DURATION[tariff_type]["days"]
 
         subscription = await self.subscription_service.create_subscription(
             user_id=payment.user_id,

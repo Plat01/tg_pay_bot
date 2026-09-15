@@ -26,9 +26,7 @@ from src.infrastructure.vpn_subscription.schemas import (
     VpnTag,
 )
 from src.models.encrypted_subscription import EncryptedSubscription
-from src.services.tariff import TARIFF_DURATION
-
-# TARIFF_DURATION (days/hours per tariff) is re-exported from src.services.tariff
+from src.services.tariff import get_tariff_devices, get_tariff_duration
 
 UTC = UTC
 
@@ -158,14 +156,17 @@ class VpnSubscriptionService:
             ttl_hours = max(1, int(ttl_seconds / 3600))
             expires_at = end_date
         elif tariff_type:
-            if tariff_type not in TARIFF_DURATION:
+            duration = get_tariff_duration(tariff_type)
+            if duration is None:
                 raise ValueError(f"Invalid tariff type: {tariff_type}")
-            duration = TARIFF_DURATION[tariff_type]
             ttl_hours = duration["hours"]
             expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
         else:
             raise ValueError("Either tariff_type or end_date must be provided")
 
+        # Device limit comes from the tariff; settings value is the fallback
+        if max_devices is None and tariff_type:
+            max_devices = get_tariff_devices(tariff_type)
         max_devices = max_devices or settings.default_max_devices
 
         client = self._get_client()
@@ -281,9 +282,8 @@ class VpnSubscriptionService:
             EncryptedSubscription for trial.
         """
         return await self.create_subscription_for_tariff(
-            tariff_type="trial" if not end_date else None,
+            tariff_type="trial",
             subscription_id=subscription_id,
-            max_devices=1,
             info_block_text="Для продления подписки обратитесь в поддержку",
             end_date=end_date,
         )

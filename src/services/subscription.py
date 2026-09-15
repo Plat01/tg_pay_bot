@@ -12,7 +12,7 @@ from src.infrastructure.database.repositories import (
 )
 from src.models.encrypted_subscription import EncryptedSubscription
 from src.models.subscription import Subscription
-from src.services.tariff import TARIFF_DURATION_DAYS
+from src.services.tariff import get_tariff_days
 
 MSK_TZ = ZoneInfo("Europe/Moscow")
 
@@ -53,10 +53,9 @@ class SubscriptionService:
         Returns:
             Created Subscription instance.
         """
-        if subscription_type not in TARIFF_DURATION_DAYS:
+        duration_days = get_tariff_days(subscription_type)
+        if duration_days is None:
             raise ValueError(f"Invalid subscription type: {subscription_type}")
-
-        duration_days = TARIFF_DURATION_DAYS[subscription_type]
         end_date = datetime.now(MSK_TZ) + timedelta(days=duration_days)
 
         return await self.repository.create_subscription(
@@ -112,9 +111,9 @@ class SubscriptionService:
             Created Subscription instance.
         """
         if duration_days is None:
-            if subscription_type not in TARIFF_DURATION_DAYS:
+            duration_days = get_tariff_days(subscription_type)
+            if duration_days is None:
                 raise ValueError(f"Invalid subscription type: {subscription_type}")
-            duration_days = TARIFF_DURATION_DAYS[subscription_type]
 
         end_date = datetime.now(MSK_TZ) + timedelta(days=duration_days)
 

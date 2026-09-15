@@ -7,7 +7,7 @@ import uuid
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from src.bot.constants import TARIFF_CALLBACKS, CallbackData, get_subscription_type_label
+from src.bot.constants import CallbackData, build_tariff_callback, get_subscription_type_label
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.payments.schemas import PlategaPaymentMethod
@@ -285,12 +285,11 @@ class Keyboards:
         buttons = [
             [
                 InlineKeyboardButton(
-                    text=tariffs[tariff_type]["label"],
-                    callback_data=callback_data,
+                    text=data["label"],
+                    callback_data=build_tariff_callback(tariff_type),
                 )
             ]
-            for tariff_type, callback_data in TARIFF_CALLBACKS.items()
-            if tariff_type in tariffs
+            for tariff_type, data in tariffs.items()
         ]
         buttons.append(
             [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)]

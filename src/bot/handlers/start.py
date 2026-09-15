@@ -17,7 +17,7 @@ from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.models.payment import PaymentStatus
 from src.services.subscription import SubscriptionService
-from src.services.tariff import TARIFFS, TariffService
+from src.services.tariff import TariffService
 from src.services.user import UserService
 
 logger = logging.getLogger(__name__)
@@ -214,8 +214,7 @@ async def _build_tariff_list_text(header: str) -> str:
         tariffs = await tariff_service.get_all_tariffs()
 
     lines = "".join(
-        f"• {TARIFFS[tariff_type]['duration_text']} — {int(data['price'])} ₽\n"
-        for tariff_type, data in tariffs.items()
+        f"• {data['duration_text']} — {int(data['price'])} ₽\n" for data in tariffs.values()
     )
 
     return (

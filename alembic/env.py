@@ -18,6 +18,7 @@ from src.models import (
     ReferralEarning,
     ReferralEarningStatus,
     Product,
+    TariffSetting,
 )  # noqa: F401
 
 config = context.config

@@ -11,6 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from src.bot.constants import Commands, get_subscription_type_label
+from src.bot.handlers.tariff_admin import TariffAddStates, TariffEditStates
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import (
@@ -1041,6 +1042,12 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
         GrantSubscriptionStates.waiting_for_telegram_id,
         GrantSubscriptionStates.waiting_for_days,
         GrantSubscriptionStates.waiting_for_confirmation,
+        TariffEditStates.waiting_for_tariff,
+        TariffEditStates.waiting_for_field,
+        TariffEditStates.waiting_for_value,
+        TariffEditStates.waiting_for_confirmation,
+        TariffAddStates.waiting_for_value,
+        TariffAddStates.waiting_for_confirmation,
     ]:
         await state.clear()
         await message.answer("❌ Процесс отменен.")

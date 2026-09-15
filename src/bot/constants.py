@@ -4,7 +4,7 @@ All callback data strings, command names, and other constants
 are centralized here to avoid typos and ensure consistency.
 """
 
-from src.services.tariff import TARIFF_LABELS
+from src.services.tariff import get_tariff_names
 
 
 class CallbackData:
@@ -46,7 +46,10 @@ class CallbackData:
     BUY_SUBSCRIPTION = "buy_subscription"
     GET_SUBSCRIPTION_LINK = "get_sub_link"  # Format: get_sub_link:{subscription_id}
 
-    # Tariffs (see TARIFF_CALLBACKS for the tariff type mapping)
+    # Tariffs
+    TARIFF_SELECT = "tariff_select"  # Format: tariff_select:{tariff_type}
+
+    # Legacy tariff callbacks (kept for buttons in old, already sent messages)
     TARIFF_1_MONTH = "tariff_1_month"
     TARIFF_3_MONTHS = "tariff_3_months"
     TARIFF_12_MONTHS = "tariff_12_months"
@@ -83,6 +86,8 @@ class Commands:
     PAYMENT_BY_EXTERNAL_ID = "payment_by_ext"
     ADD_BALANCE = "add_balance"
     GRANT_SUBSCRIPTION = "grant_subscription"
+    TARIFFS = "tariffs"
+    ADD_TARIFF = "add_tariff"
 
 
 class Limits:
@@ -123,17 +128,32 @@ class Emoji:
     DEVICES = "📱"
 
 
-# Tariff type -> callback data, in display order.
-TARIFF_CALLBACKS = {
-    "monthly": CallbackData.TARIFF_1_MONTH,
-    "quarterly": CallbackData.TARIFF_3_MONTHS,
-    "yearly": CallbackData.TARIFF_12_MONTHS,
+# Legacy callback data -> tariff type (buttons from messages sent before
+# tariffs became dynamic).
+LEGACY_CALLBACK_TARIFFS = {
+    CallbackData.TARIFF_1_MONTH: "monthly",
+    CallbackData.TARIFF_3_MONTHS: "quarterly",
+    CallbackData.TARIFF_12_MONTHS: "yearly",
 }
 
-# Callback data -> tariff type.
-CALLBACK_TARIFFS = {callback: tariff for tariff, callback in TARIFF_CALLBACKS.items()}
 
-SUBSCRIPTION_TYPE_LABELS = {**TARIFF_LABELS, "unknown": "Неизвестно"}
+def build_tariff_callback(tariff_type: str) -> str:
+    """Build callback data for a tariff button."""
+    return f"{CallbackData.TARIFF_SELECT}:{tariff_type}"
+
+
+def parse_tariff_callback(callback_data: str | None) -> str | None:
+    """Get tariff type from callback data (dynamic or legacy)."""
+    if not callback_data:
+        return None
+
+    if callback_data.startswith(f"{CallbackData.TARIFF_SELECT}:"):
+        return callback_data.split(":", 1)[1] or None
+
+    return LEGACY_CALLBACK_TARIFFS.get(callback_data)
+
+
+UNKNOWN_SUBSCRIPTION_LABEL = "Неизвестно"
 
 
 def get_subscription_type_label(subscription_type: str | None) -> str:
@@ -146,5 +166,5 @@ def get_subscription_type_label(subscription_type: str | None) -> str:
         Russian label for subscription type.
     """
     if not subscription_type:
-        return SUBSCRIPTION_TYPE_LABELS["unknown"]
-    return SUBSCRIPTION_TYPE_LABELS.get(subscription_type, subscription_type)
+        return UNKNOWN_SUBSCRIPTION_LABEL
+    return get_tariff_names().get(subscription_type, subscription_type)

@@ -6,6 +6,7 @@ from src.infrastructure.database.repositories.subscription import SubscriptionRe
 from src.infrastructure.database.repositories.user import UserRepository
 from src.infrastructure.database.repositories.product import ProductRepository
 from src.infrastructure.database.repositories.encrypted_subscription import EncryptedSubscriptionRepository
+from src.infrastructure.database.repositories.tariff import TariffRepository
 
 __all__ = [
     "UserRepository",
@@ -14,4 +15,5 @@ __all__ = [
     "SubscriptionRepository",
     "ProductRepository",
     "EncryptedSubscriptionRepository",
+    "TariffRepository",
 ]

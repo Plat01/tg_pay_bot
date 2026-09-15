@@ -10,7 +10,8 @@ from src.infrastructure.vpn_subscription.schemas import (
     CreateEncryptedSubscriptionRequest,
     EncryptedSubscriptionResponse,
 )
-from src.services.vpn_subscription import VpnSubscriptionService, TARIFF_DURATION
+from src.services.tariff import get_tariff_duration
+from src.services.vpn_subscription import VpnSubscriptionService
 
 
 @pytest.fixture
@@ -42,11 +43,12 @@ def mock_api_response():
 
 @pytest.mark.asyncio
 async def test_tariff_duration_mapping():
-    """Test tariff duration mapping."""
-    assert TARIFF_DURATION["trial"]["hours"] == 72
-    assert TARIFF_DURATION["monthly"]["hours"] == 720
-    assert TARIFF_DURATION["quarterly"]["hours"] == 2160
-    assert TARIFF_DURATION["yearly"]["hours"] == 8760
+    """Test tariff duration mapping (defaults, cache not initialized)."""
+    assert get_tariff_duration("trial")["hours"] == 72
+    assert get_tariff_duration("monthly")["hours"] == 720
+    assert get_tariff_duration("quarterly")["hours"] == 2160
+    assert get_tariff_duration("yearly")["hours"] == 8760
+    assert get_tariff_duration("unknown") is None
 
 
 @pytest.mark.asyncio

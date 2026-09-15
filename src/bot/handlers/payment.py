@@ -16,16 +16,20 @@ from aiogram import Dispatcher, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from src.bot.constants import CALLBACK_TARIFFS
+from src.bot.constants import (
+    LEGACY_CALLBACK_TARIFFS,
+    CallbackData,
+    parse_tariff_callback,
+)
 from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
-from src.services.tariff import TariffService
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import UserRepository
 from src.infrastructure.payments import PlategaPaymentMethod
 from src.models.payment import PaymentStatus
 from src.services.payment import PaymentService
+from src.services.tariff import TariffService
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +40,7 @@ async def handle_tariff_selection(callback: CallbackQuery) -> None:
     Args:
         callback: Telegram callback query.
     """
-    tariff_type = CALLBACK_TARIFFS.get(callback.data)
+    tariff_type = parse_tariff_callback(callback.data)
     if not tariff_type:
         await callback.answer("❌ Неверный тариф", show_alert=True)
         return
@@ -110,6 +114,10 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
                 amount=amount,
                 payment_method=payment_method,
                 description=f"Подписка: {tariff_data['label']}",
+                extra_metadata={
+                    "tariff_type": tariff_type,
+                    "tariff_days": tariff_data["days"],
+                },
             )
 
             logger.error(
@@ -312,9 +320,9 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
     Args:
         callback: Telegram callback query.
     """
-    from src.services.user import UserService
     from src.services.subscription import SubscriptionService
-    from src.services.vpn_subscription import VpnSubscriptionService, TARIFF_DURATION
+    from src.services.user import UserService
+    from src.services.vpn_subscription import VpnSubscriptionService
 
     try:
         tariff_type = callback.data.split(":")[1] if callback.data else None
@@ -360,6 +368,10 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
                 amount=amount,
                 payment_provider="balance",
                 description=f"Подписка: {tariff_data['label']} (с баланса)",
+                payment_metadata={
+                    "tariff_type": tariff_type,
+                    "tariff_days": tariff_data["days"],
+                },
             )
 
             payment = await payment_service.complete_payment(payment)
@@ -368,16 +380,7 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
 
             user_updated = await user_service.get_user_by_telegram_id(str(callback.from_user.id))
 
-            if tariff_type not in TARIFF_DURATION:
-                await callback.message.edit_text(
-                    "❌ Неверный тип тарифа. Обратитесь в поддержку.",
-                    parse_mode="HTML",
-                    reply_markup=Keyboards.error_with_support_link(),
-                )
-                await callback.answer()
-                return
-
-            duration_days = TARIFF_DURATION[tariff_type]["days"]
+            duration_days = tariff_data["days"]
 
             subscription = await subscription_service.create_subscription(
                 user_id=user.id,
@@ -440,7 +443,11 @@ def register_payment_handlers(dp: Dispatcher) -> None:
     """
     dp.callback_query.register(
         handle_tariff_selection,
-        F.data.in_(set(CALLBACK_TARIFFS)),
+        F.data.startswith(f"{CallbackData.TARIFF_SELECT}:"),
+    )
+    dp.callback_query.register(
+        handle_tariff_selection,
+        F.data.in_(set(LEGACY_CALLBACK_TARIFFS)),
     )
 
     dp.callback_query.register(

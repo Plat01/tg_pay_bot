@@ -6,6 +6,7 @@ from src.models.payment import Payment, PaymentStatus
 from src.models.product import Product
 from src.models.referral import ReferralEarning, ReferralEarningStatus
 from src.models.encrypted_subscription import EncryptedSubscription
+from src.models.tariff import TariffSetting
 
 __all__ = [
     "User",
@@ -16,4 +17,5 @@ __all__ = [
     "ReferralEarning",
     "ReferralEarningStatus",
     "EncryptedSubscription",
+    "TariffSetting",
 ]
