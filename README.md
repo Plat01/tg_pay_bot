@@ -38,10 +38,10 @@ cp .env.example .env
 
 ```bash
 # Запуск всех сервисов
-docker-compose up -d
+docker compose up -d
 
 # Просмотр логов
-docker-compose logs -f app
+docker compose logs -f app
 ```
 
 ### 3. Перезапуск бота при изменениях
@@ -111,8 +111,7 @@ src/
 │   ├── bot.py                # Инициализация бота и диспетчера
 │   ├── keyboards.py          # Клавиатуры (inline/reply)
 │   ├── texts.py              # Тексты сообщений
-│   ├── constants.py          # Константы бота
-│   └── subscription_prices.py # Цены и длительность тарифов
+│   └── constants.py          # Константы бота
 ├── infrastructure/           # Инфраструктурный слой
 │   ├── database/             # Работа с БД
 │   │   ├── repositories/      # Репозитории для доступа к данным
@@ -125,6 +124,7 @@ src/
 │       └── exceptions.py      # Исключения платежных систем
 ├── models/                   # SQLModel модели (User, Payment, Subscription, etc.)
 ├── services/                 # Бизнес-логика (payment, user, subscription, referral)
+│   └── tariff.py             # Таблица TARIFFS: цены и длительность тарифов
 ├── workers/                  # Фоновые задачи (scheduler)
 ├── config.py                 # Конфигурация через pydantic-settings
 └── main.py                   # Точка входа
@@ -161,6 +161,35 @@ src/
 - referrer_id, referral_id, payment_id
 - amount, percent
 - status - pending/paid/cancelled
+
+## Тарифы
+
+Тарифы задаются в коде — единственный источник — таблица `TARIFFS` в `src/services/tariff.py`:
+
+```python
+TARIFFS = {
+    "monthly": {
+        "price": 199.0,            # цена в рублях (должна быть уникальной)
+        "days": 30,                # длительность подписки в днях
+        "max_grant_days": 29,      # верхняя граница ручной выдачи дней для этого тарифа
+        "duration_text": "1 месяц",  # текст в кнопке и списке тарифов
+        "devices": 2,              # лимит устройств в подписи
+        "label": "Месячная",       # название типа подписки
+    },
+    ...
+}
+```
+
+Из таблицы выводятся длительности (включая TTL VPN-ключа), подписи кнопок, текст выбора
+тарифа и названия типов подписки — менять цены и сроки нужно только здесь, после чего
+перезапустить бота (кэш тарифов строится при старте).
+
+Цены обязаны быть уникальными: входящий платёж сопоставляется с тарифом по сумме.
+Менять цены лучше, когда нет неоплаченных счетов — у уже созданных платежей остаётся
+старая сумма.
+
+Чтобы добавить новый тариф, кроме записи в `TARIFFS` нужна константа callback в
+`src/bot/constants.py` и строка в `TARIFF_CALLBACKS` там же.
 
 ## Переменные окружения
 

@@ -46,15 +46,19 @@
 ```
 /grant_subscription
 ```
-Бот запросит: Telegram ID → тип подписки → подтверждение.
+Бот запросит: Telegram ID → количество дней → подтверждение.
 
 ### Быстрый режим
 ```
-/grant_subscription <telegram_id> <тип>
+/grant_subscription <telegram_id> <дней>
 ```
-Доступные типы: `1_month`, `3_months`, `12_months`
+Количество дней определяет тип подписки:
+• меньше 4 = trial (3 дня)
+• 4-29 = monthly (30 дней)
+• 30-89 = quarterly (90 дней)
+• 90+ = yearly (365 дней)
 
-Пример: `/grant_subscription 123456789 1_month`
+Пример: `/grant_subscription 123456789 30`
 
 ## Отмена
 

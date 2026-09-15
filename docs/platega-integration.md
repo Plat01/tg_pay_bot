@@ -26,7 +26,7 @@ src/infrastructure/payments/
 | Слой | Назначение | Примеры |
 |------|------------|---------|
 | `src/models/` | Модели данных (БД) | Payment, User |
-| `src/repositories/` | Доступ к данным | PaymentRepository |
+| `src/infrastructure/database/repositories/` | Доступ к данным | PaymentRepository |
 | `src/services/` | Бизнес-логика | PaymentService |
 | `src/infrastructure/` | Внешние интеграции | PlategaProvider |
 
@@ -123,10 +123,10 @@ Platega поддерживает следующие методы:
 
 ```env
 # Platega API
-PLATEGA_API_KEY=your_api_key
-PLATEGA_SHOP_ID=your_shop_id
+PLATEGA_MERCHANT_ID=your_merchant_id_uuid
+PLATEGA_SECRET=your_api_secret
 PLATEGA_WEBHOOK_SECRET=your_webhook_secret
-PLATEGA_API_URL=https://api.platega.io
+PLATEGA_API_URL=https://app.platega.io
 PLATEGA_WEBHOOK_URL=https://your-domain.com/webhook/platega
 DEFAULT_PAYMENT_PROVIDER=platega
 ```
@@ -138,11 +138,11 @@ DEFAULT_PAYMENT_PROVIDER=platega
 ```python
 class Settings(BaseSettings):
     # Platega Payment Provider
-    platega_api_key: str = ""
-    platega_shop_id: str = ""
-    platega_webhook_secret: str = ""
-    platega_api_url: str = "https://api.platega.io"
+    platega_api_url: str = "https://app.platega.io"
+    platega_merchant_id: str = ""
+    platega_secret: str = ""
     platega_webhook_url: str = ""
+    platega_webhook_secret: str = ""
     default_payment_provider: str = "platega"
 ```
 
@@ -221,7 +221,7 @@ async def webhook_handler(request: web.Request) -> web.Response:
 ## Безопасность
 
 1. **Webhook подпись** - проверка HMAC-SHA256
-2. **API Key** - авторизация через Bearer token
+2. **MerchantId + Secret** - авторизация через заголовки `X-MerchantId` и `X-Secret`
 3. **Timeout** - защита от зависших запросов
 
 ## Добавление нового провайдера

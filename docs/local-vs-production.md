@@ -4,18 +4,21 @@
 
 Для запуска бота локально из России, где Telegram API заблокирован:
 
-### 1. Network Mode: Host
-Оба контейнера должны использовать `network_mode: host`:
+### 1. Network Mode
+
+**Текущая настройка (`docker-compose.yml`):** bridge network (по умолчанию). `network_mode: host` закомментирован.
+
+Если Telegram API заблокирован, можно включить host mode и прокси:
 
 ```yaml
 services:
   app:
-    network_mode: host
+    network_mode: host  # раскомментировать
     environment:
       DB_HOST: localhost
 
   db:
-    network_mode: host
+    # network_mode: host  # раскомментировать при host mode
 ```
 
 **Почему:**
@@ -78,7 +81,7 @@ services:
 
 ## Docker Compose Examples
 
-### Local (Russia)
+### Local (Russia, с host mode)
 ```yaml
 services:
   app:
@@ -86,9 +89,12 @@ services:
       context: .
       network: host  # For build
     network_mode: host
+    container_name: tg_pay_bot_app
+    restart: unless-stopped
     environment:
       DB_HOST: localhost
-    env_file: .env
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
@@ -97,6 +103,8 @@ services:
 
   db:
     image: postgres:16-alpine
+    container_name: tg_pay_bot_db
+    restart: unless-stopped
     network_mode: host
     environment:
       POSTGRES_USER: postgres
@@ -111,29 +119,37 @@ services:
       retries: 5
 ```
 
-### Production
+### Production (bridge — как в текущем docker-compose.yml)
 ```yaml
 services:
   app:
     build:
       context: .
-    env_file: .env
+    container_name: tg_pay_bot_app
+    restart: unless-stopped
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
 
   db:
     image: postgres:16-alpine
+    container_name: tg_pay_bot_db
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: tg_pay_bot
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-tg_pay_bot}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"  # Local-only access
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -h localhost"]
       interval: 5s
       timeout: 5s
       retries: 5
-    # ports: - "5432:5432"  # Only if external access needed
 ```
