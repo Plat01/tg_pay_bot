@@ -28,6 +28,10 @@ from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import UserRepository
 from src.infrastructure.payments import PlategaPaymentMethod
 from src.models.payment import PaymentStatus
+from src.services.admin_notification import (
+    PaymentErrorStage,
+    notify_admins_payment_error,
+)
 from src.services.payment import PaymentService
 from src.services.tariff import TariffService
 
@@ -154,6 +158,19 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
             f"(user_id={callback.from_user.id}, amount={amount}, method={payment_method.name})"
         )
 
+        await notify_admins_payment_error(
+            stage=PaymentErrorStage.CREATE,
+            error=e,
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            full_name=callback.from_user.full_name,
+            amount=amount,
+            details={
+                "Способ оплаты": payment_method.name,
+                "Тариф": tariff_type,
+            },
+        )
+
         await callback.message.edit_text(
             f"❌ <b>Ошибка создания платежа</b>\n\n{str(e)}",
             parse_mode="HTML",
@@ -164,6 +181,19 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
         logger.error(
             f"Failed to create payment: {e} "
             f"(user_id={callback.from_user.id}, amount={amount}, method={payment_method.name})"
+        )
+
+        await notify_admins_payment_error(
+            stage=PaymentErrorStage.CREATE,
+            error=e,
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            full_name=callback.from_user.full_name,
+            amount=amount,
+            details={
+                "Способ оплаты": payment_method.name,
+                "Тариф": tariff_type,
+            },
         )
 
         await callback.message.edit_text(
@@ -262,6 +292,14 @@ async def handle_confirm_payment(callback: CallbackQuery) -> None:
                             "payment_id": payment_id,
                         },
                     )
+                    await notify_admins_payment_error(
+                        stage=PaymentErrorStage.DELIVERY,
+                        error=e,
+                        telegram_id=callback.from_user.id,
+                        username=callback.from_user.username,
+                        full_name=callback.from_user.full_name,
+                        payment=payment,
+                    )
                     await callback.message.edit_text(
                         f"❌ <b>Ошибка выдачи товара</b>\n\n{str(e)}",
                         parse_mode="HTML",
@@ -304,6 +342,15 @@ async def handle_confirm_payment(callback: CallbackQuery) -> None:
                 "user_id": callback.from_user.id,
                 "payment_id": payment_id,
             },
+        )
+
+        await notify_admins_payment_error(
+            stage=PaymentErrorStage.STATUS_CHECK,
+            error=e,
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            full_name=callback.from_user.full_name,
+            details={"ID платежа": payment_id},
         )
 
         await callback.message.edit_text(
@@ -399,6 +446,18 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
                 await vpn_service.close_client()
             except Exception as e:
                 logger.error(f"Failed to create VPN subscription: {e}")
+                await notify_admins_payment_error(
+                    stage=PaymentErrorStage.VPN_LINK,
+                    error=e,
+                    telegram_id=callback.from_user.id,
+                    username=callback.from_user.username,
+                    full_name=callback.from_user.full_name,
+                    payment=payment,
+                    details={
+                        "Подписка": str(subscription.id),
+                        "Тариф": tariff_type,
+                    },
+                )
 
             logger.error(
                 f"Subscription purchased with balance: user_id={user.id}, "
@@ -425,6 +484,15 @@ async def handle_payment_balance_selection(callback: CallbackQuery) -> None:
                 "user_id": callback.from_user.id,
                 "tariff_type": tariff_type if "tariff_type" in locals() else None,
             },
+        )
+        await notify_admins_payment_error(
+            stage=PaymentErrorStage.BALANCE_PAYMENT,
+            error=e,
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            full_name=callback.from_user.full_name,
+            amount=amount if "amount" in locals() else None,
+            details={"Тариф": tariff_type if "tariff_type" in locals() else None},
         )
         await callback.message.edit_text(
             "❌ <b>Ошибка оплаты с баланса</b>\n\n"

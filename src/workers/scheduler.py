@@ -14,6 +14,10 @@ from src.bot.texts import Texts
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.models.payment import Payment, PaymentStatus
+from src.services.admin_notification import (
+    PaymentErrorStage,
+    notify_admins_payment_error,
+)
 from src.services.payment import PaymentService
 from src.services.subscription import SubscriptionService
 
@@ -101,6 +105,20 @@ async def check_pending_payments_job() -> None:
                     },
                     exc_info=True,
                 )
+                # Уведомление админов не должно прерывать обработку остальных платежей
+                try:
+                    user = await payment_service.user_repository.get_by_id(payment.user_id)
+                    await notify_admins_payment_error(
+                        stage=PaymentErrorStage.AUTO_CHECK,
+                        error=e,
+                        user=user,
+                        payment=payment,
+                    )
+                except Exception as notify_error:
+                    logger.error(
+                        f"Failed to notify admins about payment error: {notify_error}",
+                        extra={"payment_id": str(payment.id)},
+                    )
 
 
 async def mark_payment_as_expired(
@@ -192,6 +210,19 @@ async def process_active_payment(
                 extra={"payment_id": str(payment.id)},
                 exc_info=True,
             )
+            try:
+                user = await payment_service.user_repository.get_by_id(payment.user_id)
+                await notify_admins_payment_error(
+                    stage=PaymentErrorStage.DELIVERY,
+                    error=e,
+                    user=user,
+                    payment=payment,
+                )
+            except Exception as notify_error:
+                logger.error(
+                    f"Failed to notify admins about delivery error: {notify_error}",
+                    extra={"payment_id": str(payment.id)},
+                )
 
     elif payment.status == PaymentStatus.FAILED:
         logger.warning(

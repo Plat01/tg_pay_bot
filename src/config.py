@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     # Admin IDs for notifications (comma-separated in .env, e.g. "123,456,789")
     admin_ids: str = ""
 
+    # Notify admins about failed payments
+    notify_admins_on_payment_errors: bool = True
+
     @computed_field
     @property
     def admin_id_list(self) -> list[str]:

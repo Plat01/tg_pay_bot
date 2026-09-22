@@ -27,6 +27,10 @@ from src.infrastructure.payments import (
     PlategaPaymentMethod,
 )
 from src.models.payment import Payment, PaymentStatus
+from src.services.admin_notification import (
+    PaymentErrorStage,
+    notify_admins_payment_error,
+)
 from src.services.referral import ReferralService
 from src.services.subscription import SubscriptionService
 from src.services.tariff import TariffService, get_tariff_days
@@ -393,7 +397,7 @@ class PaymentService:
         return payment
 
     async def fail_payment(self, payment: Payment) -> Payment:
-        """Mark payment as failed.
+        """Mark payment as failed and notify admins.
 
         Args:
             payment: Payment instance to fail.
@@ -402,7 +406,23 @@ class PaymentService:
             Updated Payment instance.
         """
         logger.error(f"Failing payment: payment_id={payment.id}")
-        return await self.repository.update_status(payment, PaymentStatus.FAILED)
+        payment = await self.repository.update_status(payment, PaymentStatus.FAILED)
+
+        # Уведомляем администраторов: у пользователя не прошла оплата
+        try:
+            user = await self.user_repository.get_by_id(payment.user_id)
+            await notify_admins_payment_error(
+                stage=PaymentErrorStage.PROVIDER_REJECTED,
+                error="Платежная система вернула статус FAILED",
+                user=user,
+                payment=payment,
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to notify admins about failed payment: {e} (payment_id={payment.id})"
+            )
+
+        return payment
 
     async def cancel_payment(self, payment: Payment) -> Payment:
         """Mark payment as cancelled.
@@ -511,6 +531,24 @@ class PaymentService:
                     "tariff_type": tariff_type,
                 },
             )
+            # Оплата прошла, но ссылку выдать не удалось - нужен админ
+            try:
+                user = await self.user_repository.get_by_id(payment.user_id)
+                await notify_admins_payment_error(
+                    stage=PaymentErrorStage.VPN_LINK,
+                    error=e,
+                    user=user,
+                    payment=payment,
+                    details={
+                        "Подписка": str(subscription.id),
+                        "Тариф": tariff_type,
+                    },
+                )
+            except Exception as notify_error:
+                logger.error(
+                    f"Failed to notify admins about VPN link error: {notify_error} "
+                    f"(payment_id={payment.id})"
+                )
 
         subscription.subscription_type = tariff_type
         self.session.add(subscription)

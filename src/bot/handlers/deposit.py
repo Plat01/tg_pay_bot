@@ -21,6 +21,10 @@ from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import UserRepository
 from src.infrastructure.payments import PlategaPaymentMethod
 from src.models.payment import Payment, PaymentStatus
+from src.services.admin_notification import (
+    PaymentErrorStage,
+    notify_admins_payment_error,
+)
 from src.services.payment import PaymentService
 
 logger = logging.getLogger(__name__)
@@ -316,6 +320,19 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
             f"Failed to create payment: {e} (user_id={callback.from_user.id}, amount={amount})"
         )
 
+        await notify_admins_payment_error(
+            stage=PaymentErrorStage.CREATE,
+            error=e,
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            full_name=callback.from_user.full_name,
+            amount=amount,
+            details={
+                "Способ оплаты": payment_method.name,
+                "Тип": "Пополнение баланса",
+            },
+        )
+
         await callback.message.edit_text(
             f"❌ <b>Ошибка создания платежа</b>\n\n"
             f"Попробуйте позже или выберите другой способ оплаты.\n\n"
@@ -420,6 +437,14 @@ async def cmd_check_payment(message: Message) -> None:
             f"Failed to check payment: {e}",
             extra={"user_id": message.from_user.id, "payment_id": str(payment_id)},
         )
+        await notify_admins_payment_error(
+            stage=PaymentErrorStage.STATUS_CHECK,
+            error=e,
+            telegram_id=message.from_user.id,
+            username=message.from_user.username,
+            full_name=message.from_user.full_name,
+            details={"ID платежа": payment_id},
+        )
         await message.answer(
             f"❌ Ошибка проверки статуса\n\nПопробуйте позже.\nТехническая информация: {str(e)[:100]}"
         )
@@ -455,6 +480,14 @@ async def check_payment_callback(callback: CallbackQuery) -> None:
         await callback.answer(f"❌ {str(e)}", show_alert=True)
     except Exception as e:
         logger.error(f"Failed to check payment: {e}")
+        await notify_admins_payment_error(
+            stage=PaymentErrorStage.STATUS_CHECK,
+            error=e,
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            full_name=callback.from_user.full_name,
+            details={"ID платежа": payment_id},
+        )
         await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
 

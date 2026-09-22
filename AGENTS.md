@@ -99,6 +99,7 @@ src/
 │   └── product.py            # (deprecated, будет удален)
 ├── services/                 # Бизнес-логика
 │   ├── payment.py            # Сервис платежей
+│   ├── admin_notification.py # Уведомления админов об ошибках платежей
 │   ├── subscription.py       # Сервис подписок (без ProductRepository)
 │   ├── vpn_subscription.py   # VPN Subscription Service (API)
 │   ├── tariff.py             # Сервис тарифов (DEFAULT_PRICES)
@@ -116,7 +117,8 @@ tests/
 ├── infrastructure/           # Unit тесты инфраструктуры
 │   └── payments/             # Тесты платежных систем
 ├── services/                 # Unit тесты сервисов
-│   └── test_vpn_subscription.py  # Тест VPN Subscription Service
+│   ├── test_vpn_subscription.py  # Тест VPN Subscription Service
+│   └── test_admin_notification.py # Тест уведомлений админов
 └── conftest.py               # Pytest конфигурация и fixtures
 alembic/
 └── versions/                 # Миграции БД
