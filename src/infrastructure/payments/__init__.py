@@ -6,7 +6,9 @@ with implementations for various payment systems (Platega, etc).
 
 from src.models.payment import PaymentStatus
 from src.infrastructure.payments.base import (
+    PAYMENT_METHOD_KIND_VIEW,
     PaymentMethodInfo,
+    PaymentMethodKind,
     PaymentProvider,
     PaymentProviderName,
     CreatePaymentResult,
@@ -44,6 +46,8 @@ __all__ = [
     "PaymentProvider",
     "PaymentProviderName",
     "PaymentMethodInfo",
+    "PaymentMethodKind",
+    "PAYMENT_METHOD_KIND_VIEW",
     "PaymentStatus",
     "CreatePaymentResult",
     "PaymentStatusResult",

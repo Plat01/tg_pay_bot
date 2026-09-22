@@ -16,7 +16,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from src.infrastructure.payments.base import PaymentProviderName
+from src.infrastructure.payments.base import (
+    PaymentMethodInfo,
+    PaymentMethodKind,
+    PaymentProviderName,
+)
 from src.infrastructure.payments.exceptions import (
     PaymentCreationError,
     PaymentProviderUnavailable,
@@ -124,6 +128,88 @@ class TestPlategaProviderAvailability:
                 mock_session.get.return_value.__aexit__ = AsyncMock(return_value=None)
 
                 assert await provider.check_availability() is False
+
+    def test_get_payment_methods_have_kinds(self, mock_settings: MagicMock) -> None:
+        """Test methods are mapped to shared payment method kinds."""
+        mock_settings.platega_enabled_methods = "2,13"
+
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+            kinds = [method.kind for method in provider.get_payment_methods()]
+
+        assert kinds == [PaymentMethodKind.SBP, PaymentMethodKind.CRYPTO]
+
+    @pytest.mark.asyncio
+    async def test_check_method_availability_success(
+        self,
+        mock_settings: MagicMock,
+        platega_create_response: dict,
+    ) -> None:
+        """Test a method is available when the probe transaction is created."""
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+            method = PaymentMethodInfo(
+                provider="platega", code="2", kind=PaymentMethodKind.SBP
+            )
+
+            mock_response = MagicMock()
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value=platega_create_response)
+
+            mock_session = AsyncMock()
+            mock_session.post = MagicMock(return_value=mock_response)
+            mock_session.closed = False
+
+            with patch.object(provider, "_get_session", return_value=mock_session):
+                mock_session.post.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_response
+                )
+                mock_session.post.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                assert await provider.check_method_availability(method) is True
+
+    @pytest.mark.asyncio
+    async def test_check_method_availability_rejected(self, mock_settings: MagicMock) -> None:
+        """Test a method disabled for the merchant is reported unavailable."""
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+            method = PaymentMethodInfo(
+                provider="platega", code="11", kind=PaymentMethodKind.CARD_RU
+            )
+
+            mock_response = MagicMock()
+            mock_response.status = 400
+            mock_response.json = AsyncMock(
+                return_value={"message": "Payment method is not allowed"}
+            )
+
+            mock_session = AsyncMock()
+            mock_session.post = MagicMock(return_value=mock_response)
+            mock_session.closed = False
+
+            with patch.object(provider, "_get_session", return_value=mock_session):
+                mock_session.post.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_response
+                )
+                mock_session.post.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                assert await provider.check_method_availability(method) is False
+
+    @pytest.mark.asyncio
+    async def test_check_method_availability_on_error(self, mock_settings: MagicMock) -> None:
+        """Test a method is unavailable when the probe request fails."""
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+            method = PaymentMethodInfo(
+                provider="platega", code="2", kind=PaymentMethodKind.SBP
+            )
+
+            with patch.object(
+                provider,
+                "create_payment",
+                AsyncMock(side_effect=PaymentProviderUnavailable("boom")),
+            ):
+                assert await provider.check_method_availability(method) is False
 
     @pytest.mark.asyncio
     async def test_check_availability_on_connection_error(

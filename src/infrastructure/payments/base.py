@@ -18,6 +18,7 @@ from src.models.payment import PaymentStatus
 # Re-export PaymentStatus for convenience
 __all__ = [
     "PaymentProviderName",
+    "PaymentMethodKind",
     "PaymentMethodInfo",
     "CreatePaymentResult",
     "PaymentStatusResult",
@@ -138,6 +139,40 @@ class WebhookData(BaseModel):
     )
 
 
+class PaymentMethodKind(str, Enum):
+    """Kind of payment method, shared by all providers.
+
+    A button in the bot corresponds to a kind, not to a provider: if several
+    providers support SBP, the user still sees one "СБП QR-код" button and
+    the provider is chosen by priority.
+
+    Values:
+        SBP: СБП QR-код (Russian fast payment system)
+        CARD_RU: Russian bank cards
+        CARD_INTL: Foreign bank cards
+        CRYPTO: Cryptocurrency
+        ERIP: ЕРИП (Belarusian payment system)
+    """
+
+    SBP = "sbp"
+    CARD_RU = "card_ru"
+    CARD_INTL = "card_intl"
+    CRYPTO = "crypto"
+    ERIP = "erip"
+
+
+# Как тип способа оплаты выглядит в интерфейсе: название, эмодзи и порядок
+# кнопки. Одинаково для всех провайдеров, поэтому кнопка не зависит от того,
+# через кого в итоге пойдет платеж.
+PAYMENT_METHOD_KIND_VIEW: dict[PaymentMethodKind, tuple[str, str, int]] = {
+    PaymentMethodKind.SBP: ("СБП QR-код", "💳", 10),
+    PaymentMethodKind.CARD_RU: ("Банковская карта РФ", "💳", 20),
+    PaymentMethodKind.CARD_INTL: ("Международная карта", "🌍", 30),
+    PaymentMethodKind.ERIP: ("ЕРИП", "🏦", 40),
+    PaymentMethodKind.CRYPTO: ("Криптовалюта", "🪙", 50),
+}
+
+
 class PaymentMethodInfo(BaseModel):
     """Description of a single payment method exposed by a provider.
 
@@ -148,21 +183,32 @@ class PaymentMethodInfo(BaseModel):
     Attributes:
         provider: Provider name the method belongs to (e.g. 'platega').
         code: Provider-specific method identifier in string form (e.g. '2').
-        label: Human-readable method name (without emoji).
-        emoji: Emoji prepended to the button label.
-        order: Sort order of the button (ascending).
+        kind: Kind of the method, shared by all providers.
     """
 
     provider: str = Field(..., description="Provider name")
     code: str = Field(..., description="Provider-specific method code")
-    label: str = Field(..., description="Method name for buttons and messages")
-    emoji: str = Field(default="💳", description="Emoji for the button label")
-    order: int = Field(default=100, description="Button sort order")
+    kind: PaymentMethodKind = Field(..., description="Kind of payment method")
 
     @property
     def key(self) -> str:
         """Unique method key in the 'provider:code' form."""
         return f"{self.provider}:{self.code}"
+
+    @property
+    def label(self) -> str:
+        """Method name for buttons and messages."""
+        return PAYMENT_METHOD_KIND_VIEW[self.kind][0]
+
+    @property
+    def emoji(self) -> str:
+        """Emoji for the button label."""
+        return PAYMENT_METHOD_KIND_VIEW[self.kind][1]
+
+    @property
+    def order(self) -> int:
+        """Button sort order (ascending)."""
+        return PAYMENT_METHOD_KIND_VIEW[self.kind][2]
 
     @property
     def button_text(self) -> str:
@@ -236,6 +282,21 @@ class PaymentProvider(ABC):
             True if the provider is available, False otherwise.
         """
         return self.is_configured()
+
+    async def check_method_availability(self, method: PaymentMethodInfo) -> bool:
+        """Check that a single payment method works for this merchant.
+
+        Called on bot start for every method returned by
+        ``get_payment_methods()``. Providers whose API does not report the
+        enabled methods should override this with a probe request.
+
+        Args:
+            method: Method to check.
+
+        Returns:
+            True if the method can be used, False otherwise.
+        """
+        return True
 
     @abstractmethod
     async def create_payment(

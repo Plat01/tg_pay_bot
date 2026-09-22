@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     # Timeout (seconds) of the provider availability check performed on bot start
     payment_provider_check_timeout: float = 5.0
 
+    # Amount of the probe transaction used to check that a payment method is
+    # enabled for the merchant (the transaction is never paid and expires)
+    payment_method_probe_amount: Decimal = Decimal("10")
+
     # Payment Auto-Check Settings
     payment_check_interval_minutes: int = 5  # Check every 5 minutes
     payment_expiry_timeout_hours: int = 1  # Mark as expired after 1 hour

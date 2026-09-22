@@ -85,15 +85,16 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
         await callback.answer("❌ Неверный формат", show_alert=True)
         return
 
-    provider_name, method_code, tariff_type = parsed
+    selector, tariff_type = parsed
 
-    # Способ оплаты мог стать недоступен: провайдер отключили в настройках
-    # или он не ответил при запуске бота, а кнопка осталась в старом сообщении
-    method = PaymentMethodsService.get_method(provider_name, method_code)
+    # Способ оплаты мог стать недоступен: провайдер отключили в настройках,
+    # он не ответил при запуске бота или метод выключен у мерчанта,
+    # а кнопка осталась в старом сообщении
+    method = PaymentMethodsService.resolve_selector(selector)
     if method is None:
         logger.error(
-            f"Payment method is not available: provider={provider_name}, "
-            f"code={method_code}, user_id={callback.from_user.id}"
+            f"Payment method is not available: selector={selector}, "
+            f"user_id={callback.from_user.id}"
         )
         await callback.answer(Texts.PAYMENT_METHOD_UNAVAILABLE, show_alert=True)
 
@@ -105,6 +106,8 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
         except Exception as e:
             logger.error(f"Failed to refresh payment methods keyboard: {e}")
         return
+
+    provider_name = method.provider
 
     try:
         async with async_session_maker() as session:

@@ -38,6 +38,7 @@ def mock_settings() -> MagicMock:
     settings.default_payment_provider = "platega"
     settings.platega_enabled_methods = "2,11"
     settings.payment_provider_check_timeout = 5.0
+    settings.payment_method_probe_amount = Decimal("10")
     return settings
 
 

@@ -3,8 +3,10 @@
 The service decides which payment method buttons the bot shows, so the tests
 cover:
 - providers that are unconfigured / unavailable / broken are skipped
-- methods of several providers live together in one list
-- lookup by provider and method code
+- every payment method is probed separately
+- a kind no provider supports disappears from the keyboards
+- the provider for a kind is chosen by priority
+- lookup by selector, both new (kind) and legacy (provider:code)
 """
 
 from collections.abc import Iterator
@@ -13,7 +15,11 @@ from unittest.mock import patch
 
 import pytest
 
-from src.infrastructure.payments.base import PaymentMethodInfo, PaymentProvider
+from src.infrastructure.payments.base import (
+    PaymentMethodInfo,
+    PaymentMethodKind,
+    PaymentProvider,
+)
 from src.infrastructure.payments.factory import PaymentProviderFactory
 from src.services.payment_methods import PaymentMethodsService
 
@@ -24,15 +30,17 @@ class FakeProvider(PaymentProvider):
     def __init__(
         self,
         provider_name: str = "fake",
+        kinds: list[PaymentMethodKind] | None = None,
         configured: bool = True,
         available: bool = True,
-        methods: list[PaymentMethodInfo] | None = None,
+        broken_kinds: set[PaymentMethodKind] | None = None,
         raise_on_check: bool = False,
     ) -> None:
         self._name = provider_name
+        self._kinds = kinds if kinds is not None else [PaymentMethodKind.SBP]
         self._configured = configured
         self._available = available
-        self._methods = methods
+        self._broken_kinds = broken_kinds or set()
         self._raise_on_check = raise_on_check
 
     @property
@@ -48,11 +56,13 @@ class FakeProvider(PaymentProvider):
         return self._available
 
     def get_payment_methods(self) -> list[PaymentMethodInfo]:
-        if self._methods is not None:
-            return self._methods
         return [
-            PaymentMethodInfo(provider=self._name, code="1", label="Способ 1", order=10),
+            PaymentMethodInfo(provider=self._name, code=str(index), kind=kind)
+            for index, kind in enumerate(self._kinds, start=1)
         ]
+
+    async def check_method_availability(self, method: PaymentMethodInfo) -> bool:
+        return method.kind not in self._broken_kinds
 
     async def create_payment(self, amount, currency, description, metadata=None, **kwargs):
         pass
@@ -110,7 +120,7 @@ class TestRefreshCache:
         with patch_providers(providers):
             methods = await PaymentMethodsService.refresh_cache()
 
-        assert [method.code for method in methods] == ["1"]
+        assert [method.kind for method in methods] == [PaymentMethodKind.SBP]
         assert PaymentMethodsService.get_available_providers() == ["fake"]
 
     async def test_unconfigured_provider_is_skipped(self) -> None:
@@ -134,7 +144,7 @@ class TestRefreshCache:
 
     async def test_provider_without_methods_is_skipped(self) -> None:
         """A provider with no enabled methods is not shown."""
-        providers = {"fake": FakeProvider(methods=[])}
+        providers = {"fake": FakeProvider(kinds=[])}
 
         with patch_providers(providers):
             methods = await PaymentMethodsService.refresh_cache()
@@ -146,85 +156,162 @@ class TestRefreshCache:
         providers = {
             "broken": FakeProvider(provider_name="broken", raise_on_check=True),
             "working": FakeProvider(
-                provider_name="working",
-                methods=[
-                    PaymentMethodInfo(
-                        provider="working", code="7", label="Способ 7", order=20
-                    )
-                ],
+                provider_name="working", kinds=[PaymentMethodKind.CRYPTO]
             ),
         }
 
         with patch_providers(providers):
             methods = await PaymentMethodsService.refresh_cache()
 
-        assert [method.key for method in methods] == ["working:7"]
+        assert [method.provider for method in methods] == ["working"]
 
-    async def test_methods_of_several_providers_are_sorted(self) -> None:
-        """Methods of different providers are merged and sorted by order."""
+
+class TestMethodProbe:
+    """Tests for the per-method availability check."""
+
+    async def test_method_disabled_for_merchant_is_dropped(self) -> None:
+        """A method the provider rejects does not get a button."""
         providers = {
-            "first": FakeProvider(
-                provider_name="first",
-                methods=[
-                    PaymentMethodInfo(provider="first", code="1", label="Второй", order=20)
-                ],
-            ),
-            "second": FakeProvider(
-                provider_name="second",
-                methods=[
-                    PaymentMethodInfo(provider="second", code="2", label="Первый", order=10)
-                ],
-            ),
+            "fake": FakeProvider(
+                kinds=[PaymentMethodKind.SBP, PaymentMethodKind.CARD_RU],
+                broken_kinds={PaymentMethodKind.CARD_RU},
+            )
         }
-
-        with patch_providers(providers):
-            methods = await PaymentMethodsService.refresh_cache()
-
-        assert [method.key for method in methods] == ["second:2", "first:1"]
-
-
-class TestLookup:
-    """Tests for looking up a method by provider and code."""
-
-    async def test_get_method_returns_available_method(self) -> None:
-        """An available method is found by provider and code."""
-        providers = {"fake": FakeProvider()}
 
         with patch_providers(providers):
             await PaymentMethodsService.refresh_cache()
 
-        method = PaymentMethodsService.get_method("fake", "1")
+        assert PaymentMethodsService.get_available_kinds() == [PaymentMethodKind.SBP]
+
+    async def test_provider_with_all_methods_disabled_is_dropped(self) -> None:
+        """A provider whose methods all fail the probe is not shown."""
+        providers = {
+            "fake": FakeProvider(
+                kinds=[PaymentMethodKind.SBP],
+                broken_kinds={PaymentMethodKind.SBP},
+            )
+        }
+
+        with patch_providers(providers):
+            methods = await PaymentMethodsService.refresh_cache()
+
+        assert methods == []
+        assert PaymentMethodsService.get_available_providers() == []
+
+
+class TestKinds:
+    """Tests for merging methods of several providers by kind."""
+
+    async def test_same_kind_of_two_providers_gives_one_button(self) -> None:
+        """Two providers with the same kind produce a single button."""
+        providers = {
+            "first": FakeProvider(provider_name="first", kinds=[PaymentMethodKind.SBP]),
+            "second": FakeProvider(provider_name="second", kinds=[PaymentMethodKind.SBP]),
+        }
+
+        with patch_providers(providers):
+            await PaymentMethodsService.refresh_cache()
+
+        assert PaymentMethodsService.get_available_kinds() == [PaymentMethodKind.SBP]
+
+    async def test_kinds_are_sorted_by_button_order(self) -> None:
+        """Kinds of different providers are merged and sorted."""
+        providers = {
+            "first": FakeProvider(provider_name="first", kinds=[PaymentMethodKind.CRYPTO]),
+            "second": FakeProvider(provider_name="second", kinds=[PaymentMethodKind.SBP]),
+        }
+
+        with patch_providers(providers):
+            await PaymentMethodsService.refresh_cache()
+
+        assert PaymentMethodsService.get_available_kinds() == [
+            PaymentMethodKind.SBP,
+            PaymentMethodKind.CRYPTO,
+        ]
+
+    async def test_kind_without_provider_is_not_shown(self) -> None:
+        """A kind no available provider supports has no button."""
+        providers = {"fake": FakeProvider(kinds=[PaymentMethodKind.SBP])}
+
+        with patch_providers(providers):
+            await PaymentMethodsService.refresh_cache()
+
+        assert PaymentMethodKind.CARD_RU not in PaymentMethodsService.get_available_kinds()
+        assert PaymentMethodsService.resolve(PaymentMethodKind.CARD_RU) is None
+
+
+class TestResolve:
+    """Tests for choosing a provider and parsing selectors."""
+
+    async def test_default_provider_wins(self) -> None:
+        """The default provider is preferred for a shared kind."""
+        providers = {
+            "other": FakeProvider(provider_name="other", kinds=[PaymentMethodKind.SBP]),
+            "platega": FakeProvider(provider_name="platega", kinds=[PaymentMethodKind.SBP]),
+        }
+
+        with patch_providers(providers):
+            await PaymentMethodsService.refresh_cache()
+
+            method = PaymentMethodsService.resolve(PaymentMethodKind.SBP)
 
         assert method is not None
-        assert method.label == "Способ 1"
-        assert PaymentMethodsService.is_available("fake", "1") is True
+        assert method.provider == "platega"
 
-    async def test_get_method_returns_none_for_unavailable(self) -> None:
-        """An unavailable method is not found."""
+    async def test_resolve_selector_by_kind(self) -> None:
+        """A kind selector from the new callback format is resolved."""
+        providers = {"fake": FakeProvider(kinds=[PaymentMethodKind.CRYPTO])}
+
+        with patch_providers(providers):
+            await PaymentMethodsService.refresh_cache()
+
+            method = PaymentMethodsService.resolve_selector("crypto")
+
+        assert method is not None
+        assert method.kind == PaymentMethodKind.CRYPTO
+
+    async def test_resolve_selector_by_provider_and_code(self) -> None:
+        """A legacy "provider:code" selector is resolved."""
+        providers = {"fake": FakeProvider(kinds=[PaymentMethodKind.SBP])}
+
+        with patch_providers(providers):
+            await PaymentMethodsService.refresh_cache()
+
+            method = PaymentMethodsService.resolve_selector("fake:1")
+
+        assert method is not None
+        assert method.kind == PaymentMethodKind.SBP
+
+    async def test_resolve_selector_of_unavailable_method(self) -> None:
+        """An unavailable method is not resolved."""
         providers = {"fake": FakeProvider(available=False)}
 
         with patch_providers(providers):
             await PaymentMethodsService.refresh_cache()
 
-        assert PaymentMethodsService.get_method("fake", "1") is None
-        assert PaymentMethodsService.is_available("fake", "1") is False
+            assert PaymentMethodsService.resolve_selector("sbp") is None
+            assert PaymentMethodsService.resolve_selector("fake:1") is None
 
     def test_fallback_to_configured_providers(self) -> None:
         """Without an initialized cache configured providers are used."""
         providers = {"fake": FakeProvider()}
 
         with patch_providers(providers):
-            methods = PaymentMethodsService.get_available_methods()
+            kinds = PaymentMethodsService.get_available_kinds()
 
-        assert [method.key for method in methods] == ["fake:1"]
+        assert kinds == [PaymentMethodKind.SBP]
 
 
 class TestPaymentMethodInfo:
     """Tests for the payment method model."""
 
-    def test_button_text_contains_emoji_and_label(self) -> None:
-        """The button label is built from emoji and method name."""
-        method = PaymentMethodInfo(provider="fake", code="1", label="Карта", emoji="💳")
+    def test_view_is_taken_from_kind(self) -> None:
+        """Label, emoji and order come from the method kind."""
+        method = PaymentMethodInfo(
+            provider="fake", code="1", kind=PaymentMethodKind.CARD_RU
+        )
 
-        assert method.button_text == "💳 Карта"
+        assert method.label == "Банковская карта РФ"
+        assert method.button_text == "💳 Банковская карта РФ"
         assert method.key == "fake:1"
+        assert method.order == 20

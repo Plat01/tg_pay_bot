@@ -16,12 +16,26 @@ from src.bot.constants import (
 )
 from src.config import settings
 from src.infrastructure.database import async_session_maker
+from src.infrastructure.payments import PAYMENT_METHOD_KIND_VIEW, PaymentMethodKind
 from src.services.payment_methods import PaymentMethodsService
 from src.services.tariff import TariffService
 
 
 class Keyboards:
     """All bot keyboards."""
+
+    @staticmethod
+    def _kind_button_text(kind: PaymentMethodKind) -> str:
+        """Build the button label for a payment method kind.
+
+        Args:
+            kind: Kind of payment method.
+
+        Returns:
+            Button text with emoji.
+        """
+        label, emoji, _ = PAYMENT_METHOD_KIND_VIEW[kind]
+        return f"{emoji} {label}"
 
     # Main menu keyboard (Inline - buttons under message)
     @staticmethod
@@ -102,11 +116,11 @@ class Keyboards:
         buttons = [
             [
                 InlineKeyboardButton(
-                    text=method.button_text,
-                    callback_data=build_deposit_method_callback(method.provider, method.code),
+                    text=Keyboards._kind_button_text(kind),
+                    callback_data=build_deposit_method_callback(kind),
                 )
             ]
-            for method in PaymentMethodsService.get_available_methods()
+            for kind in PaymentMethodsService.get_available_kinds()
         ]
 
         buttons.append(
@@ -345,14 +359,12 @@ class Keyboards:
             ],
         ]
 
-        for method in PaymentMethodsService.get_available_methods():
+        for kind in PaymentMethodsService.get_available_kinds():
             buttons.append(
                 [
                     InlineKeyboardButton(
-                        text=method.button_text,
-                        callback_data=build_payment_method_callback(
-                            method.provider, method.code, tariff_type
-                        ),
+                        text=Keyboards._kind_button_text(kind),
+                        callback_data=build_payment_method_callback(kind, tariff_type),
                     )
                 ]
             )

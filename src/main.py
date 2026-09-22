@@ -26,17 +26,22 @@ def build_restart_message() -> str:
     Returns:
         Message text for admins.
     """
-    methods = PaymentMethodsService.get_available_methods()
+    kinds = PaymentMethodsService.get_available_kinds()
 
-    if not methods:
+    if not kinds:
         return (
             "Бот успешно перезапущен\n\n"
             "⚠️ Нет доступных способов оплаты: платежные провайдеры "
-            "не настроены или недоступны"
+            "не настроены, недоступны или все их способы выключены"
         )
 
-    methods_text = "\n".join(f"• {method.label} ({method.provider})" for method in methods)
-    return f"Бот успешно перезапущен\n\nДоступные способы оплаты:\n{methods_text}"
+    lines = []
+    for kind in kinds:
+        method = PaymentMethodsService.resolve(kind)
+        if method is not None:
+            lines.append(f"• {method.label} ({method.provider})")
+
+    return "Бот успешно перезапущен\n\nДоступные способы оплаты:\n" + "\n".join(lines)
 
 
 async def notify_admins() -> None:

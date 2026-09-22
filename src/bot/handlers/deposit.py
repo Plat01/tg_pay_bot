@@ -239,22 +239,20 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
         await callback.answer()
         return
 
-    # Parse provider and method code from callback data
-    parsed = parse_deposit_method_callback(callback.data)
+    # Parse payment method selector from callback data
+    selector = parse_deposit_method_callback(callback.data)
 
-    if not parsed:
+    if not selector:
         await callback.answer("❌ Неверный формат", show_alert=True)
         return
 
-    provider_name, method_code = parsed
-
     # The method could become unavailable after the button was sent
-    method = PaymentMethodsService.get_method(provider_name, method_code)
+    method = PaymentMethodsService.resolve_selector(selector)
 
     if method is None:
         logger.error(
-            f"Payment method is not available: provider={provider_name}, "
-            f"code={method_code}, user_id={callback.from_user.id}"
+            f"Payment method is not available: selector={selector}, "
+            f"user_id={callback.from_user.id}"
         )
         await callback.answer(Texts.PAYMENT_METHOD_UNAVAILABLE, show_alert=True)
 
@@ -266,6 +264,8 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
         except Exception as e:
             logger.error(f"Failed to refresh payment methods keyboard: {e}")
         return
+
+    provider_name = method.provider
 
     # Get stored amount
     state_data = await state.get_data()

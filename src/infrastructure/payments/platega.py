@@ -24,6 +24,7 @@ from src.models.payment import PaymentStatus
 from src.infrastructure.payments.base import (
     CreatePaymentResult,
     PaymentMethodInfo,
+    PaymentMethodKind,
     PaymentProvider,
     PaymentProviderName,
     PaymentStatusResult,
@@ -31,6 +32,7 @@ from src.infrastructure.payments.base import (
 )
 from src.infrastructure.payments.exceptions import (
     PaymentCreationError,
+    PaymentProviderError,
     PaymentProviderUnavailable,
     PaymentSignatureError,
     PaymentStatusError,
@@ -48,14 +50,15 @@ from src.infrastructure.payments.retry import DEFAULT_RETRY_CONFIG
 
 logger = logging.getLogger(__name__)
 
-# Описание способов оплаты Platega: код -> (название, эмодзи, порядок кнопки).
-# Названия используются и на кнопках, и в текстах сообщений о платеже.
-PLATEGA_METHODS: dict[PlategaPaymentMethod, tuple[str, str, int]] = {
-    PlategaPaymentMethod.SBP_QR: ("СБП QR-код", "💳", 10),
-    PlategaPaymentMethod.CARD_ACQUIRING: ("Банковская карта РФ", "💳", 20),
-    PlategaPaymentMethod.INTERNATIONAL: ("Международная карта", "🌍", 30),
-    PlategaPaymentMethod.ERIP: ("ЕРИП", "🏦", 40),
-    PlategaPaymentMethod.CRYPTO: ("Криптовалюта", "🪙", 50),
+# Способы оплаты Platega -> общий для всех провайдеров тип способа.
+# Названия и эмодзи кнопок берутся из типа (PAYMENT_METHOD_KIND_VIEW),
+# поэтому кнопка выглядит одинаково независимо от провайдера.
+PLATEGA_METHODS: dict[PlategaPaymentMethod, PaymentMethodKind] = {
+    PlategaPaymentMethod.SBP_QR: PaymentMethodKind.SBP,
+    PlategaPaymentMethod.CARD_ACQUIRING: PaymentMethodKind.CARD_RU,
+    PlategaPaymentMethod.INTERNATIONAL: PaymentMethodKind.CARD_INTL,
+    PlategaPaymentMethod.ERIP: PaymentMethodKind.ERIP,
+    PlategaPaymentMethod.CRYPTO: PaymentMethodKind.CRYPTO,
 }
 
 
@@ -175,19 +178,58 @@ class PlategaProvider(PaymentProvider):
         methods: list[PaymentMethodInfo] = []
 
         for method in self._get_enabled_methods():
-            label, emoji, order = PLATEGA_METHODS[method]
             methods.append(
                 PaymentMethodInfo(
                     provider=self.name.value,
                     code=str(method.value),
-                    label=label,
-                    emoji=emoji,
-                    order=order,
+                    kind=PLATEGA_METHODS[method],
                 )
             )
 
         methods.sort(key=lambda item: item.order)
         return methods
+
+    async def check_method_availability(self, method: PaymentMethodInfo) -> bool:
+        """Check that a payment method is enabled for this merchant.
+
+        Platega does not report which methods a merchant has, so the only
+        way to find out is to try to create a transaction: a method that is
+        switched off makes the API answer with an error.
+
+        The probe transaction is never saved to the database and is left
+        unpaid, so it expires on the Platega side by itself.
+
+        Args:
+            method: Method to check.
+
+        Returns:
+            True if Platega accepted a transaction with this method.
+        """
+        try:
+            result = await self.create_payment(
+                amount=settings.payment_method_probe_amount,
+                currency="RUB",
+                description="Проверка доступности способа оплаты",
+                payment_method=method.code,
+            )
+        except PaymentProviderError as e:
+            logger.error(
+                f"Platega payment method probe failed: method={method.code} "
+                f"({method.label}), error={e}"
+            )
+            return False
+
+        if not result.success:
+            logger.error(
+                f"Platega payment method is not available: method={method.code} "
+                f"({method.label}), error={result.error_message}"
+            )
+            return False
+
+        logger.error(
+            f"Platega payment method is available: method={method.code} ({method.label})"
+        )
+        return True
 
     async def check_availability(self) -> bool:
         """Check that the Platega API is reachable and credentials are valid.

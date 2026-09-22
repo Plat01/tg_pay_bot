@@ -12,6 +12,7 @@ import pytest
 
 from src.infrastructure.payments.base import (
     PaymentMethodInfo,
+    PaymentMethodKind,
     PaymentProvider,
     PaymentProviderName,
 )
@@ -28,7 +29,9 @@ class MockProvider(PaymentProvider):
 
     def get_payment_methods(self) -> list[PaymentMethodInfo]:
         return [
-            PaymentMethodInfo(provider="mock_provider", code="1", label="Mock method"),
+            PaymentMethodInfo(
+                provider="mock_provider", code="1", kind=PaymentMethodKind.SBP
+            ),
         ]
 
     async def create_payment(
