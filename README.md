@@ -284,6 +284,76 @@ print(f"Payment URL: {result.payment_url}")
 2. Зарегистрировать в `PaymentProviderFactory`
 3. Добавить конфигурацию в `Settings`
 
+## Логи и диагностика платежей
+
+### Просмотр логов
+
+```bash
+# Логи приложения вживую
+docker compose logs -f app
+
+# Последние 200 строк
+docker compose logs app --tail 200
+
+# Логи БД
+docker compose logs db --tail 100
+
+# Логи за период
+docker compose logs app --since 30m
+docker compose logs app --since 2026-09-16T10:00:00
+```
+
+### Почему не прошел платеж
+
+Причина отказа **не сохраняется в БД** — искать нужно в логах и в панели Platega.
+
+**1. Статус платежа через админские команды бота:**
+
+```
+/payments <telegram_id>        # платежи юзера: сумма, статус, провайдер, даты
+/payment_by_ext <external_id>  # найти юзера по id транзакции Platega
+```
+
+**2. Поиск по логам:**
+
+```bash
+# По конкретному платежу
+docker compose logs app | grep "payment_id=<uuid>"
+docker compose logs app | grep "external_id=<platega_id>"
+
+# Ошибки платежной системы
+docker compose logs app | grep -iE "Platega create payment failed|connection error|Failed to deliver|Invalid webhook|signature"
+
+# Настоящий статус, который вернула Platega
+docker compose logs app | grep "external_status="
+```
+
+Ключевые точки логирования:
+
+| Файл | Что логируется |
+|------|----------------|
+| `src/infrastructure/payments/platega.py` | HTTP-код и текст ошибки при создании платежа, ошибки сети/таймауты, распарсенный webhook |
+| `src/services/payment.py` | `external_status` от провайдера и во что он смапился, смена статуса |
+| `src/bot/handlers/payment.py` | сбой выдачи VPN уже после успешной оплаты |
+
+**3. Запрос в БД:**
+
+```bash
+docker compose exec db psql -U postgres -d tg_pay_bot -c "
+select p.id, p.external_id, p.amount, p.status, p.payment_provider,
+       p.payment_metadata, p.created_at, p.completed_at, u.telegram_id
+from payments p join users u on u.id = p.user_id
+where u.telegram_id = '<telegram_id>'
+order by p.created_at desc limit 20;"
+```
+
+**4. Панель Platega** — окончательный ответ «почему банк отклонил» есть только там, искать по `external_id`.
+
+### Важные нюансы
+
+- Статус `failed` ставится **только** при `CHARGEBACKED`. Любой незнакомый статус Platega маппится в `PENDING` (см. `_map_platega_status_str`), поэтому неудачный платеж чаще всего выглядит как вечный `pending`, а не `failed`. Реальный статус — в логах по `external_status=`.
+- Пользователю при `failed` показывается захардкоженный текст «Техническая ошибка платежной системы» — это константа, а не диагноз.
+
 ## Реферальная система
 
 1. При регистрации пользователь получает уникальный реферальный код
