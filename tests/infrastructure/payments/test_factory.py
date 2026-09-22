@@ -10,7 +10,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.infrastructure.payments.base import PaymentProvider, PaymentProviderName
+from src.infrastructure.payments.base import (
+    PaymentMethodInfo,
+    PaymentProvider,
+    PaymentProviderName,
+)
 from src.infrastructure.payments.factory import PaymentProviderFactory
 from src.infrastructure.payments.platega import PlategaProvider
 
@@ -21,6 +25,11 @@ class MockProvider(PaymentProvider):
     @property
     def name(self) -> str:
         return "mock_provider"
+
+    def get_payment_methods(self) -> list[PaymentMethodInfo]:
+        return [
+            PaymentMethodInfo(provider="mock_provider", code="1", label="Mock method"),
+        ]
 
     async def create_payment(
         self, amount, currency, description, metadata=None, **kwargs

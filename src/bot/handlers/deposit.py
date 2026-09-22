@@ -15,17 +15,19 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from src.bot.constants import CallbackData, parse_deposit_method_callback
+from src.bot.keyboards import Keyboards
 from src.bot.texts import Texts
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import UserRepository
-from src.infrastructure.payments import PlategaPaymentMethod
 from src.models.payment import Payment, PaymentStatus
 from src.services.admin_notification import (
     PaymentErrorStage,
     notify_admins_payment_error,
 )
 from src.services.payment import PaymentService
+from src.services.payment_methods import PaymentMethodsService
 
 logger = logging.getLogger(__name__)
 
@@ -42,32 +44,32 @@ MIN_DEPOSIT_AMOUNT = Decimal("100")
 
 
 def get_payment_method_keyboard() -> InlineKeyboardMarkup:
-    """Create keyboard with payment method options.
+    """Create keyboard with available payment method options.
+
+    Buttons are built from the payment methods available right now
+    (see PaymentMethodsService).
 
     Returns:
         InlineKeyboardMarkup with payment method buttons.
     """
-    buttons = [
-        [
-            InlineKeyboardButton(
-                text="💳 СБП QR-код",
-                callback_data=f"method:{PlategaPaymentMethod.SBP_QR}",
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="💳 Банковская карта",
-                callback_data=f"method:{PlategaPaymentMethod.CARD_ACQUIRING}",
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="❌ Отмена",
-                callback_data="method:cancel",
-            )
-        ],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    return Keyboards.deposit_methods()
+
+
+async def notify_no_payment_methods(
+    message: Message,
+    state: FSMContext,
+) -> None:
+    """Tell the user that no payment method is available and reset the flow.
+
+    Args:
+        message: Message to answer (the user's message or the bot's message
+            from a callback).
+        state: FSM state context.
+    """
+    await state.clear()
+    await message.answer(Texts.PAYMENT_METHODS_UNAVAILABLE, parse_mode="HTML")
+
+    logger.error("Deposit flow stopped: no payment methods available")
 
 
 def get_amount_keyboard() -> InlineKeyboardMarkup:
@@ -119,6 +121,11 @@ async def cmd_deposit(message: Message, state: FSMContext) -> None:
                 )
                 return
 
+            # Nothing to pay with - stop the flow before asking for a method
+            if not PaymentMethodsService.has_available_methods():
+                await notify_no_payment_methods(message, state)
+                return
+
             # Store amount and proceed to method selection
             await state.update_data(amount=amount)
             await state.set_state(DepositStates.method)
@@ -163,6 +170,11 @@ async def process_amount_preset(callback: CallbackQuery, state: FSMContext) -> N
         await callback.answer()
         return
 
+    if not PaymentMethodsService.has_available_methods():
+        await notify_no_payment_methods(callback.message, state)
+        await callback.answer()
+        return
+
     amount = Decimal(data)
     await state.update_data(amount=amount)
     await state.set_state(DepositStates.method)
@@ -195,6 +207,10 @@ async def process_amount_input(message: Message, state: FSMContext) -> None:
             )
             return
 
+        if not PaymentMethodsService.has_available_methods():
+            await notify_no_payment_methods(message, state)
+            return
+
         # Store amount and move to method selection
         await state.update_data(amount=amount)
         await state.set_state(DepositStates.method)
@@ -216,13 +232,39 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
         callback: Telegram callback query.
         state: FSM state context.
     """
-    # Parse method from callback data
-    data = callback.data.split(":")[1]
-
-    if data == "cancel":
+    # Cancel button
+    if callback.data == f"{CallbackData.DEPOSIT_METHOD}:cancel":
         await state.clear()
         await callback.message.edit_text(Texts.DEPOSIT_CANCELLED)
         await callback.answer()
+        return
+
+    # Parse provider and method code from callback data
+    parsed = parse_deposit_method_callback(callback.data)
+
+    if not parsed:
+        await callback.answer("❌ Неверный формат", show_alert=True)
+        return
+
+    provider_name, method_code = parsed
+
+    # The method could become unavailable after the button was sent
+    method = PaymentMethodsService.get_method(provider_name, method_code)
+
+    if method is None:
+        logger.error(
+            f"Payment method is not available: provider={provider_name}, "
+            f"code={method_code}, user_id={callback.from_user.id}"
+        )
+        await callback.answer(Texts.PAYMENT_METHOD_UNAVAILABLE, show_alert=True)
+
+        # Показываем актуальные способы оплаты вместо устаревших кнопок
+        try:
+            await callback.message.edit_reply_markup(
+                reply_markup=get_payment_method_keyboard()
+            )
+        except Exception as e:
+            logger.error(f"Failed to refresh payment methods keyboard: {e}")
         return
 
     # Get stored amount
@@ -234,9 +276,6 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
         await callback.message.edit_text(Texts.ERROR_GENERIC)
         await callback.answer()
         return
-
-    # Parse payment method
-    payment_method = PlategaPaymentMethod(int(data))
 
     # Clear state before API call
     await state.clear()
@@ -251,28 +290,22 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
     # Create payment via provider
     try:
         async with async_session_maker() as session:
-            payment_service = PaymentService(session)
+            payment_service = PaymentService(session, provider_name=provider_name)
             payment, result = await payment_service.create_external_payment(
                 telegram_id=str(callback.from_user.id),
                 amount=amount,
-                payment_method=payment_method,
+                payment_method=method.code,
                 description=f"Пополнение баланса",
             )
 
         logger.error(
             f"Payment created for user: user_id={callback.from_user.id}, "
             f"payment_id={payment.id}, external_id={result.external_id}, "
-            f"amount={amount}, method={payment_method.name}"
+            f"amount={amount}, provider={provider_name}, method={method.label}"
         )
 
         # Build success message
-        method_name = {
-            PlategaPaymentMethod.SBP_QR: "СБП QR-код",
-            PlategaPaymentMethod.CARD_ACQUIRING: "Банковская карта",
-            PlategaPaymentMethod.INTERNATIONAL: "Международная карта",
-            PlategaPaymentMethod.CRYPTO: "Криптовалюта",
-            PlategaPaymentMethod.ERIP: "ЕРИП",
-        }.get(payment_method, "Неизвестный метод")
+        method_name = method.label
 
         message_text = (
             f"✅ <b>Платёж создан!</b>\n\n"
@@ -328,7 +361,7 @@ async def process_method_selection(callback: CallbackQuery, state: FSMContext) -
             full_name=callback.from_user.full_name,
             amount=amount,
             details={
-                "Способ оплаты": payment_method.name,
+                "Способ оплаты": f"{provider_name} / {method.label}",
                 "Тип": "Пополнение баланса",
             },
         )

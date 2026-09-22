@@ -18,6 +18,7 @@ from src.models.payment import PaymentStatus
 # Re-export PaymentStatus for convenience
 __all__ = [
     "PaymentProviderName",
+    "PaymentMethodInfo",
     "CreatePaymentResult",
     "PaymentStatusResult",
     "WebhookData",
@@ -137,6 +138,38 @@ class WebhookData(BaseModel):
     )
 
 
+class PaymentMethodInfo(BaseModel):
+    """Description of a single payment method exposed by a provider.
+
+    Providers return these objects from ``get_payment_methods()``, the bot
+    builds keyboard buttons from them. Because every method carries its
+    provider name, methods of different providers can be shown side by side.
+
+    Attributes:
+        provider: Provider name the method belongs to (e.g. 'platega').
+        code: Provider-specific method identifier in string form (e.g. '2').
+        label: Human-readable method name (without emoji).
+        emoji: Emoji prepended to the button label.
+        order: Sort order of the button (ascending).
+    """
+
+    provider: str = Field(..., description="Provider name")
+    code: str = Field(..., description="Provider-specific method code")
+    label: str = Field(..., description="Method name for buttons and messages")
+    emoji: str = Field(default="💳", description="Emoji for the button label")
+    order: int = Field(default=100, description="Button sort order")
+
+    @property
+    def key(self) -> str:
+        """Unique method key in the 'provider:code' form."""
+        return f"{self.provider}:{self.code}"
+
+    @property
+    def button_text(self) -> str:
+        """Text shown on the inline keyboard button."""
+        return f"{self.emoji} {self.label}".strip()
+
+
 class PaymentProvider(ABC):
     """Abstract base class for payment providers.
 
@@ -167,6 +200,42 @@ class PaymentProvider(ABC):
             Provider identifier string (e.g., 'platega', 'yookassa').
         """
         pass
+
+    def is_configured(self) -> bool:
+        """Check that the provider has everything it needs to work.
+
+        Providers override this to validate their credentials (API keys,
+        merchant IDs, etc). A provider that is not configured is hidden from
+        the payment method keyboards.
+
+        Returns:
+            True if the provider can be used, False otherwise.
+        """
+        return True
+
+    @abstractmethod
+    def get_payment_methods(self) -> list[PaymentMethodInfo]:
+        """Get payment methods the provider exposes to users.
+
+        Only the methods enabled for this installation should be returned:
+        each of them becomes a button in the bot.
+
+        Returns:
+            List of PaymentMethodInfo (may be empty).
+        """
+        pass
+
+    async def check_availability(self) -> bool:
+        """Check that the provider is reachable right now.
+
+        Called on bot start (see PaymentMethodsService). The default
+        implementation only checks the configuration; providers should
+        override it with a real API request when possible.
+
+        Returns:
+            True if the provider is available, False otherwise.
+        """
+        return self.is_configured()
 
     @abstractmethod
     async def create_payment(

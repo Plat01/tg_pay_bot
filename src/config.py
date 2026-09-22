@@ -49,7 +49,13 @@ class Settings(BaseSettings):
     platega_secret: str = ""  # X-Secret header (API key)
     platega_webhook_url: str = ""  # URL for receiving webhooks (must be publicly accessible)
     platega_webhook_secret: str = ""  # Secret for webhook signature verification
+    # Payment methods enabled for Platega (comma-separated PlategaPaymentMethod
+    # codes: 2 - СБП QR, 3 - ЕРИП, 11 - карта РФ, 12 - межд. карта, 13 - крипта)
+    platega_enabled_methods: str = "2,11"
     default_payment_provider: str = "platega"
+
+    # Timeout (seconds) of the provider availability check performed on bot start
+    payment_provider_check_timeout: float = 5.0
 
     # Payment Auto-Check Settings
     payment_check_interval_minutes: int = 5  # Check every 5 minutes

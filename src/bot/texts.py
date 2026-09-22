@@ -285,6 +285,14 @@ class Texts:
     )
 
     # Payment flow texts
+    PAYMENT_METHODS_UNAVAILABLE = (
+        "❌ <b>Оплата временно недоступна</b>\n\n"
+        "Ни один способ оплаты сейчас не работает. "
+        "Попробуйте позже или обратитесь в поддержку."
+    )
+
+    PAYMENT_METHOD_UNAVAILABLE = "❌ Этот способ оплаты сейчас недоступен"
+
     PAYMENT_METHOD_SELECT = (
         "💳 <b>Выберите способ оплаты</b>\n\n"
         "Сумма: {amount} ₽\n"

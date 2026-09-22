@@ -7,10 +7,16 @@ import uuid
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from src.bot.constants import CallbackData, build_tariff_callback, get_subscription_type_label
+from src.bot.constants import (
+    CallbackData,
+    build_deposit_method_callback,
+    build_payment_method_callback,
+    build_tariff_callback,
+    get_subscription_type_label,
+)
 from src.config import settings
 from src.infrastructure.database import async_session_maker
-from src.infrastructure.payments.schemas import PlategaPaymentMethod
+from src.services.payment_methods import PaymentMethodsService
 from src.services.tariff import TariffService
 
 
@@ -84,16 +90,35 @@ class Keyboards:
     # Deposit method selection
     @staticmethod
     def deposit_methods() -> InlineKeyboardMarkup:
-        """Deposit method selection keyboard."""
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="💳 СБП QR", callback_data=CallbackData.DEPOSIT_SBP),
-                    InlineKeyboardButton(text="💳 Карта", callback_data=CallbackData.DEPOSIT_CARD),
-                ],
-                [InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.MAIN_MENU)],
+        """Deposit method selection keyboard.
+
+        Buttons are built from the payment methods that are available right
+        now (see PaymentMethodsService), so disabled or unreachable payment
+        systems are not shown.
+
+        Returns:
+            InlineKeyboardMarkup with available payment method buttons.
+        """
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=method.button_text,
+                    callback_data=build_deposit_method_callback(method.provider, method.code),
+                )
+            ]
+            for method in PaymentMethodsService.get_available_methods()
+        ]
+
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data=f"{CallbackData.DEPOSIT_METHOD}:cancel",
+                )
             ]
         )
+
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     # Deposit payment actions
     @staticmethod
@@ -301,6 +326,10 @@ class Keyboards:
     def payment_methods(tariff_type: str) -> InlineKeyboardMarkup:
         """Payment method selection keyboard.
 
+        The balance button is always shown, external payment methods are
+        taken from PaymentMethodsService: only providers that passed the
+        availability check on bot start get a button.
+
         Args:
             tariff_type: Selected tariff type ('monthly', 'quarterly', 'yearly').
 
@@ -311,25 +340,29 @@ class Keyboards:
             [
                 InlineKeyboardButton(
                     text="💰 Баланс",
-                    callback_data=f"payment_balance:{tariff_type}",
+                    callback_data=f"{CallbackData.PAYMENT_BALANCE}:{tariff_type}",
                 )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💳 СБП QR-код",
-                    callback_data=f"payment_method:{PlategaPaymentMethod.SBP_QR}:{tariff_type}",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💳 Банковская карта РФ",
-                    callback_data=f"payment_method:{PlategaPaymentMethod.CARD_ACQUIRING}:{tariff_type}",
-                )
-            ],
-            [
-                InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.BUY_SUBSCRIPTION),
             ],
         ]
+
+        for method in PaymentMethodsService.get_available_methods():
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=method.button_text,
+                        callback_data=build_payment_method_callback(
+                            method.provider, method.code, tariff_type
+                        ),
+                    )
+                ]
+            )
+
+        buttons.append(
+            [
+                InlineKeyboardButton(text="◀️ Назад", callback_data=CallbackData.BUY_SUBSCRIPTION),
+            ]
+        )
+
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     @staticmethod

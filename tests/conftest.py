@@ -36,6 +36,8 @@ def mock_settings() -> MagicMock:
     settings.platega_api_url = "https://api.platega.io"
     settings.platega_webhook_url = "https://example.com/webhook/platega"
     settings.default_payment_provider = "platega"
+    settings.platega_enabled_methods = "2,11"
+    settings.payment_provider_check_timeout = 5.0
     return settings
 
 

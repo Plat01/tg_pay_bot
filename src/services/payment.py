@@ -171,7 +171,7 @@ class PaymentService:
         amount: Decimal,
         currency: str = "RUB",
         description: str | None = None,
-        payment_method: PlategaPaymentMethod = PlategaPaymentMethod.SBP_QR,
+        payment_method: PlategaPaymentMethod | int | str | None = None,
         return_url: str | None = None,
         failed_url: str | None = None,
         extra_metadata: dict[str, Any] | None = None,
@@ -189,7 +189,8 @@ class PaymentService:
             amount: Payment amount.
             currency: Currency code (default: 'RUB').
             description: Payment description.
-            payment_method: Payment method (default: SBP_QR).
+            payment_method: Provider-specific payment method (enum or code
+                from the keyboard). None means the provider default.
             return_url: Redirect URL after success.
             failed_url: Redirect URL after failure.
             extra_metadata: Extra fields stored with the payment record
@@ -207,7 +208,8 @@ class PaymentService:
 
         logger.error(
             f"Creating external payment: telegram_id={telegram_id}, user_id={user_id}, "
-            f"amount={amount}, currency={currency}, method={payment_method.name}, provider={self.provider_name}"
+            f"amount={amount}, currency={currency}, method={payment_method}, "
+            f"provider={self.provider_name}"
         )
 
         # Create payment in external system

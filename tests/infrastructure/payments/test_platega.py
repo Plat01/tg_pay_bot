@@ -28,6 +28,119 @@ from src.infrastructure.payments.schemas import PlategaPaymentMethod, PlategaSta
 from src.models.payment import PaymentStatus
 
 
+class TestPlategaProviderAvailability:
+    """Tests for configuration check, method list and availability check."""
+
+    def test_is_configured_with_credentials(self, mock_settings: MagicMock) -> None:
+        """Test provider is configured when merchant ID and secret are set."""
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+            assert provider.is_configured() is True
+
+    def test_is_configured_without_credentials(self, mock_settings: MagicMock) -> None:
+        """Test provider is not configured when credentials are empty."""
+        mock_settings.platega_secret = ""
+        mock_settings.platega_merchant_id = ""
+
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+            assert provider.is_configured() is False
+
+    def test_get_payment_methods_from_settings(self, mock_settings: MagicMock) -> None:
+        """Test only methods enabled in settings are returned."""
+        mock_settings.platega_enabled_methods = "11,2"
+
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+            methods = provider.get_payment_methods()
+
+        # Sorted by button order, not by the order in the settings
+        assert [method.code for method in methods] == ["2", "11"]
+        assert all(method.provider == "platega" for method in methods)
+        assert methods[0].label == "СБП QR-код"
+
+    def test_get_payment_methods_skips_unknown_codes(self, mock_settings: MagicMock) -> None:
+        """Test unknown method codes in settings are ignored."""
+        mock_settings.platega_enabled_methods = "2,999,abc"
+
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+            methods = provider.get_payment_methods()
+
+        assert [method.code for method in methods] == ["2"]
+
+    @pytest.mark.asyncio
+    async def test_check_availability_without_credentials(
+        self, mock_settings: MagicMock
+    ) -> None:
+        """Test availability check fails fast without credentials."""
+        mock_settings.platega_secret = ""
+        mock_settings.platega_merchant_id = ""
+
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+            assert await provider.check_availability() is False
+
+    @pytest.mark.asyncio
+    async def test_check_availability_success(self, mock_settings: MagicMock) -> None:
+        """Test provider is available when API answers."""
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+
+            mock_response = MagicMock()
+            mock_response.status = 404  # Random transaction is not found - API works
+
+            mock_session = AsyncMock()
+            mock_session.get = MagicMock(return_value=mock_response)
+            mock_session.closed = False
+
+            with patch.object(provider, "_get_session", return_value=mock_session):
+                mock_session.get.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_response
+                )
+                mock_session.get.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                assert await provider.check_availability() is True
+
+    @pytest.mark.asyncio
+    async def test_check_availability_rejects_bad_credentials(
+        self, mock_settings: MagicMock
+    ) -> None:
+        """Test provider is unavailable when API rejects credentials."""
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+
+            mock_response = MagicMock()
+            mock_response.status = 401
+
+            mock_session = AsyncMock()
+            mock_session.get = MagicMock(return_value=mock_response)
+            mock_session.closed = False
+
+            with patch.object(provider, "_get_session", return_value=mock_session):
+                mock_session.get.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_response
+                )
+                mock_session.get.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                assert await provider.check_availability() is False
+
+    @pytest.mark.asyncio
+    async def test_check_availability_on_connection_error(
+        self, mock_settings: MagicMock
+    ) -> None:
+        """Test provider is unavailable when API is unreachable."""
+        with patch("src.infrastructure.payments.platega.settings", mock_settings):
+            provider = PlategaProvider()
+
+            mock_session = AsyncMock()
+            mock_session.get = MagicMock(side_effect=aiohttp.ClientError("boom"))
+            mock_session.closed = False
+
+            with patch.object(provider, "_get_session", return_value=mock_session):
+                assert await provider.check_availability() is False
+
+
 class TestPlategaProviderInit:
     """Tests for PlategaProvider initialization."""
 

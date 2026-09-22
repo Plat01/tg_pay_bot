@@ -673,7 +673,12 @@ async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMCont
 
     Starts deposit flow with selected amount.
     """
-    from src.bot.handlers.deposit import DepositStates, get_payment_method_keyboard
+    from src.bot.handlers.deposit import (
+        DepositStates,
+        get_payment_method_keyboard,
+        notify_no_payment_methods,
+    )
+    from src.services.payment_methods import PaymentMethodsService
 
     # Parse amount from callback data
     amount_map = {
@@ -688,6 +693,12 @@ async def handle_deposit_amount_callback(callback: CallbackQuery, state: FSMCont
     amount = amount_map.get(callback.data)
     if not amount:
         await callback.answer("❌ Неверная сумма", show_alert=True)
+        return
+
+    # Nothing to pay with - stop the flow before asking for a method
+    if not PaymentMethodsService.has_available_methods():
+        await notify_no_payment_methods(callback.message, state)
+        await callback.answer()
         return
 
     # Store amount and proceed to method selection

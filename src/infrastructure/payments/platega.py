@@ -7,13 +7,14 @@ Platega API endpoints:
 - GET /transaction/{id} - Get transaction status
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
 import logging
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import aiohttp
 from pydantic import Field
@@ -22,6 +23,7 @@ from src.config import settings
 from src.models.payment import PaymentStatus
 from src.infrastructure.payments.base import (
     CreatePaymentResult,
+    PaymentMethodInfo,
     PaymentProvider,
     PaymentProviderName,
     PaymentStatusResult,
@@ -45,6 +47,16 @@ from src.infrastructure.payments.schemas import (
 from src.infrastructure.payments.retry import DEFAULT_RETRY_CONFIG
 
 logger = logging.getLogger(__name__)
+
+# Описание способов оплаты Platega: код -> (название, эмодзи, порядок кнопки).
+# Названия используются и на кнопках, и в текстах сообщений о платеже.
+PLATEGA_METHODS: dict[PlategaPaymentMethod, tuple[str, str, int]] = {
+    PlategaPaymentMethod.SBP_QR: ("СБП QR-код", "💳", 10),
+    PlategaPaymentMethod.CARD_ACQUIRING: ("Банковская карта РФ", "💳", 20),
+    PlategaPaymentMethod.INTERNATIONAL: ("Международная карта", "🌍", 30),
+    PlategaPaymentMethod.ERIP: ("ЕРИП", "🏦", 40),
+    PlategaPaymentMethod.CRYPTO: ("Криптовалюта", "🪙", 50),
+}
 
 
 class PlategaCreatePaymentResult(CreatePaymentResult):
@@ -121,6 +133,132 @@ class PlategaProvider(PaymentProvider):
         """Get provider name."""
         return PaymentProviderName.PLATEGA
 
+    def is_configured(self) -> bool:
+        """Check that merchant ID and secret are set in the settings.
+
+        Returns:
+            True if credentials are present, False otherwise.
+        """
+        return bool(self._merchant_id and self._api_key)
+
+    def _get_enabled_methods(self) -> list[PlategaPaymentMethod]:
+        """Parse enabled payment method codes from the settings.
+
+        Unknown or malformed codes are skipped with a warning, so a typo in
+        the .env file cannot break the whole keyboard.
+
+        Returns:
+            List of enabled PlategaPaymentMethod values.
+        """
+        enabled: list[PlategaPaymentMethod] = []
+
+        for raw_code in settings.platega_enabled_methods.split(","):
+            code = raw_code.strip()
+            if not code:
+                continue
+            try:
+                method = PlategaPaymentMethod(int(code))
+            except ValueError:
+                logger.warning(f"Unknown Platega payment method in settings: {code!r}")
+                continue
+            if method not in enabled:
+                enabled.append(method)
+
+        return enabled
+
+    def get_payment_methods(self) -> list[PaymentMethodInfo]:
+        """Get payment methods enabled for this installation.
+
+        Returns:
+            List of PaymentMethodInfo sorted by button order.
+        """
+        methods: list[PaymentMethodInfo] = []
+
+        for method in self._get_enabled_methods():
+            label, emoji, order = PLATEGA_METHODS[method]
+            methods.append(
+                PaymentMethodInfo(
+                    provider=self.name.value,
+                    code=str(method.value),
+                    label=label,
+                    emoji=emoji,
+                    order=order,
+                )
+            )
+
+        methods.sort(key=lambda item: item.order)
+        return methods
+
+    async def check_availability(self) -> bool:
+        """Check that the Platega API is reachable and credentials are valid.
+
+        Requests a random transaction: an answer with any status except
+        401/403 (bad credentials) and 5xx (provider problems) means the API
+        works and accepts our headers.
+
+        Returns:
+            True if the provider can be used right now, False otherwise.
+        """
+        if not self.is_configured():
+            logger.warning("Platega provider is not configured: merchant_id or secret is empty")
+            return False
+
+        url = f"{self._api_url}/transaction/{uuid4()}"
+        timeout = aiohttp.ClientTimeout(total=settings.payment_provider_check_timeout)
+
+        try:
+            session = await self._get_session()
+            async with session.get(url, timeout=timeout) as response:
+                if response.status in (401, 403):
+                    logger.error(
+                        f"Platega credentials rejected during availability check: "
+                        f"status={response.status}"
+                    )
+                    return False
+                if response.status >= 500:
+                    logger.error(
+                        f"Platega API returned server error during availability check: "
+                        f"status={response.status}"
+                    )
+                    return False
+
+                logger.info(f"Platega provider is available (status={response.status})")
+                return True
+
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.error(f"Platega availability check failed: {e}")
+            return False
+
+    @staticmethod
+    def _coerce_payment_method(
+        payment_method: "PlategaPaymentMethod | int | str | None",
+    ) -> PlategaPaymentMethod | None:
+        """Convert a payment method code to PlategaPaymentMethod.
+
+        Handlers pass the method code as a string (it comes from callback
+        data), older code passes the enum itself.
+
+        Args:
+            payment_method: Enum value, numeric code or None.
+
+        Returns:
+            PlategaPaymentMethod or None if nothing was passed.
+
+        Raises:
+            PaymentValidationError: If the code is unknown.
+        """
+        if payment_method is None:
+            return None
+        if isinstance(payment_method, PlategaPaymentMethod):
+            return payment_method
+
+        try:
+            return PlategaPaymentMethod(int(payment_method))
+        except (TypeError, ValueError) as e:
+            raise PaymentValidationError(
+                f"Unknown Platega payment method: {payment_method!r}"
+            ) from e
+
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session with Platega authentication headers."""
         if self._session is None or self._session.closed:
@@ -142,7 +280,7 @@ class PlategaProvider(PaymentProvider):
         currency: str = "RUB",
         description: str | None = None,
         metadata: dict[str, Any] | None = None,
-        payment_method: PlategaPaymentMethod | None = None,
+        payment_method: PlategaPaymentMethod | int | str | None = None,
         return_url: str | None = None,
         failed_url: str | None = None,
         **kwargs: Any,
@@ -154,7 +292,8 @@ class PlategaProvider(PaymentProvider):
             currency: Currency code (default: 'RUB').
             description: Payment description.
             metadata: Additional metadata (stored in payload).
-            payment_method: Payment method (defaults to SBP_QR).
+            payment_method: Payment method (enum or numeric code,
+                defaults to the provider default).
             return_url: Redirect URL after success.
             failed_url: Redirect URL after failure.
             **kwargs: Additional provider-specific options.
@@ -168,8 +307,8 @@ class PlategaProvider(PaymentProvider):
         """
         url = f"{self._api_url}/transaction/process"
 
-        # Use provided payment method or default
-        method = payment_method or self._default_payment_method
+        # Use provided payment method (enum or code) or the default one
+        method = self._coerce_payment_method(payment_method) or self._default_payment_method
 
         # Build payload string from metadata
         # Convert Decimal to str for JSON serialization

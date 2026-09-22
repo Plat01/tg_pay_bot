@@ -19,6 +19,7 @@ from aiogram.types import CallbackQuery
 from src.bot.constants import (
     LEGACY_CALLBACK_TARIFFS,
     CallbackData,
+    parse_payment_method_callback,
     parse_tariff_callback,
 )
 from src.bot.keyboards import Keyboards
@@ -26,13 +27,13 @@ from src.bot.texts import Texts
 from src.config import settings
 from src.infrastructure.database import async_session_maker
 from src.infrastructure.database.repositories import UserRepository
-from src.infrastructure.payments import PlategaPaymentMethod
 from src.models.payment import PaymentStatus
 from src.services.admin_notification import (
     PaymentErrorStage,
     notify_admins_payment_error,
 )
 from src.services.payment import PaymentService
+from src.services.payment_methods import PaymentMethodsService
 from src.services.tariff import TariffService
 
 logger = logging.getLogger(__name__)
@@ -79,17 +80,33 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
     Args:
         callback: Telegram callback query.
     """
+    parsed = parse_payment_method_callback(callback.data)
+    if not parsed:
+        await callback.answer("❌ Неверный формат", show_alert=True)
+        return
+
+    provider_name, method_code, tariff_type = parsed
+
+    # Способ оплаты мог стать недоступен: провайдер отключили в настройках
+    # или он не ответил при запуске бота, а кнопка осталась в старом сообщении
+    method = PaymentMethodsService.get_method(provider_name, method_code)
+    if method is None:
+        logger.error(
+            f"Payment method is not available: provider={provider_name}, "
+            f"code={method_code}, user_id={callback.from_user.id}"
+        )
+        await callback.answer(Texts.PAYMENT_METHOD_UNAVAILABLE, show_alert=True)
+
+        # Обновляем клавиатуру, чтобы пользователь видел актуальные способы
+        try:
+            await callback.message.edit_reply_markup(
+                reply_markup=Keyboards.payment_methods(tariff_type)
+            )
+        except Exception as e:
+            logger.error(f"Failed to refresh payment methods keyboard: {e}")
+        return
+
     try:
-        parts = callback.data.split(":")
-        if len(parts) != 3:
-            await callback.answer("❌ Неверный формат", show_alert=True)
-            return
-
-        payment_method_code = int(parts[1])
-        tariff_type = parts[2]
-
-        payment_method = PlategaPaymentMethod(payment_method_code)
-
         async with async_session_maker() as session:
             tariff_service = TariffService(session)
             tariff_data = await tariff_service.get_tariff_data(tariff_type)
@@ -112,11 +129,11 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
 
     try:
         async with async_session_maker() as session:
-            payment_service = PaymentService(session)
+            payment_service = PaymentService(session, provider_name=provider_name)
             payment, result = await payment_service.create_external_payment(
                 telegram_id=str(callback.from_user.id),
                 amount=amount,
-                payment_method=payment_method,
+                payment_method=method.code,
                 description=f"Подписка: {tariff_data['label']}",
                 extra_metadata={
                     "tariff_type": tariff_type,
@@ -127,24 +144,15 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
             logger.error(
                 f"Payment created for subscription: user_id={callback.from_user.id}, "
                 f"payment_id={payment.id}, external_id={result.external_id}, "
-                f"amount={amount}, method={payment_method.name}, tariff_type={tariff_type}, "
+                f"amount={amount}, provider={provider_name}, method={method.label}, "
+                f"tariff_type={tariff_type}, "
                 f"payment_url={result.payment_url}"
             )
-
-        method_names = {
-            PlategaPaymentMethod.SBP_QR: "СБП QR-код",
-            PlategaPaymentMethod.CARD_ACQUIRING: "Банковская карта РФ",
-            PlategaPaymentMethod.INTERNATIONAL: "Международная карта",
-            PlategaPaymentMethod.CRYPTO: "Криптовалюта",
-            PlategaPaymentMethod.ERIP: "ЕРИП",
-        }
-
-        method_name = method_names.get(payment_method, "Неизвестный метод")
 
         await callback.message.edit_text(
             Texts.PAYMENT_CREATED.format(
                 amount=amount,
-                method_name=method_name,
+                method_name=method.label,
                 payment_id=payment.id,
             ),
             parse_mode="HTML",
@@ -155,7 +163,8 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
     except ValueError as e:
         logger.error(
             f"Payment validation error: {e} "
-            f"(user_id={callback.from_user.id}, amount={amount}, method={payment_method.name})"
+            f"(user_id={callback.from_user.id}, amount={amount}, "
+            f"provider={provider_name}, method={method.label})"
         )
 
         await notify_admins_payment_error(
@@ -166,7 +175,7 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
             full_name=callback.from_user.full_name,
             amount=amount,
             details={
-                "Способ оплаты": payment_method.name,
+                "Способ оплаты": f"{provider_name} / {method.label}",
                 "Тариф": tariff_type,
             },
         )
@@ -180,7 +189,8 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
     except Exception as e:
         logger.error(
             f"Failed to create payment: {e} "
-            f"(user_id={callback.from_user.id}, amount={amount}, method={payment_method.name})"
+            f"(user_id={callback.from_user.id}, amount={amount}, "
+            f"provider={provider_name}, method={method.label})"
         )
 
         await notify_admins_payment_error(
@@ -191,7 +201,7 @@ async def handle_payment_method_selection(callback: CallbackQuery) -> None:
             full_name=callback.from_user.full_name,
             amount=amount,
             details={
-                "Способ оплаты": payment_method.name,
+                "Способ оплаты": f"{provider_name} / {method.label}",
                 "Тариф": tariff_type,
             },
         )
@@ -520,12 +530,12 @@ def register_payment_handlers(dp: Dispatcher) -> None:
 
     dp.callback_query.register(
         handle_payment_method_selection,
-        F.data.startswith("payment_method:"),
+        F.data.startswith(f"{CallbackData.PAYMENT_METHOD_SELECT}:"),
     )
 
     dp.callback_query.register(
         handle_payment_balance_selection,
-        F.data.startswith("payment_balance:"),
+        F.data.startswith(f"{CallbackData.PAYMENT_BALANCE}:"),
     )
 
     dp.callback_query.register(

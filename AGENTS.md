@@ -20,7 +20,6 @@
 
 - Если файл становится слишком длинным необходимо разбивать код на отдельные файлы (об их структуре спрашивать пользователя)
 - Читать файлы от начала и до конца
-- Если необходимо использовать MCP
 - По возможности переиспользовать похожий код
 - Если удаляется какой-то прежний функционал необходимо сообщить об этом!
 
@@ -28,7 +27,7 @@
 
 - Использовать комментарии в коде
 - Типизация: strict mode
-- Асинхронный код везде
+- Асинхронный код везде где это целесообразно
 - Импорты в начале файла
 - Строгое соблюдение PEP8
 
@@ -99,7 +98,7 @@ src/
 │   └── product.py            # (deprecated, будет удален)
 ├── services/                 # Бизнес-логика
 │   ├── payment.py            # Сервис платежей
-│   ├── admin_notification.py # Уведомления админов об ошибках платежей
+│   ├── payment_methods.py    # Реестр доступных способов оплаты (проверка при старте)
 │   ├── subscription.py       # Сервис подписок (без ProductRepository)
 │   ├── vpn_subscription.py   # VPN Subscription Service (API)
 │   ├── tariff.py             # Сервис тарифов (DEFAULT_PRICES)
@@ -117,8 +116,8 @@ tests/
 ├── infrastructure/           # Unit тесты инфраструктуры
 │   └── payments/             # Тесты платежных систем
 ├── services/                 # Unit тесты сервисов
-│   ├── test_vpn_subscription.py  # Тест VPN Subscription Service
-│   └── test_admin_notification.py # Тест уведомлений админов
+│   ├── test_payment_methods.py   # Тест реестра доступных способов оплаты
+│   └── test_vpn_subscription.py  # Тест VPN Subscription Service
 └── conftest.py               # Pytest конфигурация и fixtures
 alembic/
 └── versions/                 # Миграции БД

@@ -4,6 +4,7 @@ All callback data strings, command names, and other constants
 are centralized here to avoid typos and ensure consistency.
 """
 
+from src.config import settings
 from src.services.tariff import get_tariff_names
 
 
@@ -56,7 +57,9 @@ class CallbackData:
 
     # Payment confirmation
     CONFIRM_PAYMENT = "confirm_payment"  # Format: confirm_payment:{payment_id}
-    PAYMENT_METHOD_SELECT = "payment_method"  # Format: payment_method:{tariff_type}
+    # Format: payment_method:{provider}:{code}:{tariff_type}
+    PAYMENT_METHOD_SELECT = "payment_method"
+    DEPOSIT_METHOD = "method"  # Format: method:{provider}:{code}
     PAYMENT_BALANCE = "payment_balance"  # Format: payment_balance:{tariff_type}
 
     # Admin
@@ -151,6 +154,81 @@ def parse_tariff_callback(callback_data: str | None) -> str | None:
         return callback_data.split(":", 1)[1] or None
 
     return LEGACY_CALLBACK_TARIFFS.get(callback_data)
+
+
+# --- Способы оплаты -------------------------------------------------------
+#
+# Актуальный формат callback data содержит имя провайдера, поэтому кнопки
+# разных платежных систем могут соседствовать в одной клавиатуре:
+#   payment_method:{provider}:{code}:{tariff_type}  — оплата подписки
+#   method:{provider}:{code}                        — пополнение баланса
+#
+# Старый формат (без провайдера) остается в уже отправленных сообщениях,
+# он разбирается как платеж через провайдера по умолчанию.
+
+
+def build_payment_method_callback(provider: str, code: str, tariff_type: str) -> str:
+    """Build callback data for a subscription payment method button."""
+    return f"{CallbackData.PAYMENT_METHOD_SELECT}:{provider}:{code}:{tariff_type}"
+
+
+def parse_payment_method_callback(callback_data: str | None) -> tuple[str, str, str] | None:
+    """Parse subscription payment method callback data.
+
+    Args:
+        callback_data: Raw callback data from the button.
+
+    Returns:
+        Tuple of (provider, method code, tariff type) or None if the data
+        has an unexpected format.
+    """
+    if not callback_data:
+        return None
+
+    parts = callback_data.split(":")
+    if parts[0] != CallbackData.PAYMENT_METHOD_SELECT:
+        return None
+
+    if len(parts) == 4:
+        return parts[1], parts[2], parts[3]
+
+    # Legacy format: payment_method:{code}:{tariff_type}
+    if len(parts) == 3:
+        return settings.default_payment_provider, parts[1], parts[2]
+
+    return None
+
+
+def build_deposit_method_callback(provider: str, code: str) -> str:
+    """Build callback data for a deposit payment method button."""
+    return f"{CallbackData.DEPOSIT_METHOD}:{provider}:{code}"
+
+
+def parse_deposit_method_callback(callback_data: str | None) -> tuple[str, str] | None:
+    """Parse deposit payment method callback data.
+
+    Args:
+        callback_data: Raw callback data from the button.
+
+    Returns:
+        Tuple of (provider, method code) or None if the data has an
+        unexpected format (including the "method:cancel" button).
+    """
+    if not callback_data:
+        return None
+
+    parts = callback_data.split(":")
+    if parts[0] != CallbackData.DEPOSIT_METHOD:
+        return None
+
+    if len(parts) == 3:
+        return parts[1], parts[2]
+
+    # Legacy format: method:{code}
+    if len(parts) == 2 and parts[1] != "cancel":
+        return settings.default_payment_provider, parts[1]
+
+    return None
 
 
 UNKNOWN_SUBSCRIPTION_LABEL = "Неизвестно"
