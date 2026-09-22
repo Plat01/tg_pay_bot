@@ -54,12 +54,10 @@ class Settings(BaseSettings):
     platega_enabled_methods: str = "2,11"
     default_payment_provider: str = "platega"
 
-    # Timeout (seconds) of the provider availability check performed on bot start
-    payment_provider_check_timeout: float = 5.0
-
     # Amount of the probe transaction used to check that a payment method is
-    # enabled for the merchant (the transaction is never paid and expires)
-    payment_method_probe_amount: Decimal = Decimal("10")
+    # enabled for the merchant (the transaction is never paid and expires).
+    # Must not be lower than the provider minimum, otherwise every probe fails
+    payment_method_probe_amount: Decimal = Decimal("100")
 
     # Payment Auto-Check Settings
     payment_check_interval_minutes: int = 5  # Check every 5 minutes

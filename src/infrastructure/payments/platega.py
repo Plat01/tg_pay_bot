@@ -7,14 +7,12 @@ Platega API endpoints:
 - GET /transaction/{id} - Get transaction status
 """
 
-import asyncio
 import hashlib
 import hmac
 import json
 import logging
 from decimal import Decimal
 from typing import Any
-from uuid import UUID, uuid4
 
 import aiohttp
 from pydantic import Field
@@ -23,6 +21,7 @@ from src.config import settings
 from src.models.payment import PaymentStatus
 from src.infrastructure.payments.base import (
     CreatePaymentResult,
+    MethodCheckResult,
     PaymentMethodInfo,
     PaymentMethodKind,
     PaymentProvider,
@@ -72,6 +71,7 @@ class PlategaCreatePaymentResult(CreatePaymentResult):
     """
 
     transaction_id: str | None = Field(None, description="Platega transaction UUID")
+    http_status: int | None = Field(None, description="HTTP status of the API response")
     qr_code: str | None = Field(None, description="QR code data for SBP payments")
     expires_in: str | None = Field(None, description="Time until expiration")
 
@@ -232,44 +232,86 @@ class PlategaProvider(PaymentProvider):
         return True
 
     async def check_availability(self) -> bool:
-        """Check that the Platega API is reachable and credentials are valid.
+        """Check that the provider can be used at all.
 
-        Requests a random transaction: an answer with any status except
-        401/403 (bad credentials) and 5xx (provider problems) means the API
-        works and accepts our headers.
+        Only the configuration is checked here: whether Platega really works
+        is decided by the per-method probes in check_method_availability(),
+        and a separate health request would only add a way to hide a working
+        provider by mistake.
 
         Returns:
-            True if the provider can be used right now, False otherwise.
+            True if the provider is configured.
         """
         if not self.is_configured():
-            logger.warning("Platega provider is not configured: merchant_id or secret is empty")
+            logger.error("Platega provider is not configured: merchant_id or secret is empty")
             return False
 
-        url = f"{self._api_url}/transaction/{uuid4()}"
-        timeout = aiohttp.ClientTimeout(total=settings.payment_provider_check_timeout)
+        return True
 
+    async def check_method_availability(self, method: PaymentMethodInfo) -> MethodCheckResult:
+        """Check that a payment method is enabled for this merchant.
+
+        Platega does not report which methods a merchant has, so the only way
+        to find out is to try to create a transaction: a method that is
+        switched off makes the API answer with a client error.
+
+        Network problems and 5xx answers do not hide the method - otherwise a
+        temporary outage of Platega would leave the bot without any payment
+        buttons. Such a check is logged and counted as available.
+
+        The probe transaction is never saved to the database and is left
+        unpaid, so it expires on the Platega side by itself.
+
+        Args:
+            method: Method to check.
+
+        Returns:
+            MethodCheckResult with the verdict and the reason.
+        """
         try:
-            session = await self._get_session()
-            async with session.get(url, timeout=timeout) as response:
-                if response.status in (401, 403):
-                    logger.error(
-                        f"Platega credentials rejected during availability check: "
-                        f"status={response.status}"
-                    )
-                    return False
-                if response.status >= 500:
-                    logger.error(
-                        f"Platega API returned server error during availability check: "
-                        f"status={response.status}"
-                    )
-                    return False
+            result = await self.create_payment(
+                amount=settings.payment_method_probe_amount,
+                currency="RUB",
+                description="Проверка доступности способа оплаты",
+                payment_method=method.code,
+            )
+        except PaymentProviderError as e:
+            # Недоступность API - не доказательство того, что способ выключен
+            logger.error(
+                f"Platega payment method probe failed, keeping method: "
+                f"method={method.code} ({method.label}), error={e}"
+            )
+            return MethodCheckResult(
+                available=True,
+                reason=f"проверка не удалась ({e}), способ оставлен",
+            )
 
-                logger.info(f"Platega provider is available (status={response.status})")
-                return True
+        if result.success:
+            logger.error(
+                f"Platega payment method is available: method={method.code} ({method.label})"
+            )
+            return MethodCheckResult(available=True)
 
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.error(f"Platega availability check failed: {e}")
-            return False
+        error_message = result.error_message or "неизвестная ошибка"
+        http_status = getattr(result, "http_status", None)
+
+        # Ошибка на стороне Platega - способ мог не пройти по не связанной причине
+        if http_status is None or http_status >= 500:
+            logger.error(
+                f"Platega payment method probe returned a provider error, keeping method: "
+                f"method={method.code} ({method.label}), status={http_status}, "
+                f"error={error_message}"
+            )
+            return MethodCheckResult(
+                available=True,
+                reason=f"ошибка провайдера ({error_message}), способ оставлен",
+            )
+
+        logger.error(
+            f"Platega payment method is not available: method={method.code} "
+            f"({method.label}), status={http_status}, error={error_message}"
+        )
+        return MethodCheckResult(available=False, reason=error_message)
 
     @staticmethod
     def _coerce_payment_method(
@@ -402,6 +444,7 @@ class PlategaProvider(PaymentProvider):
                         )
                         return PlategaCreatePaymentResult(
                             success=False,
+                            http_status=response.status,
                             payment_id=transaction_id,
                             external_id=transaction_id,
                             payment_url=response_data.get("redirect", ""),
@@ -415,6 +458,7 @@ class PlategaProvider(PaymentProvider):
 
                     return PlategaCreatePaymentResult(
                         success=False,
+                        http_status=response.status,
                         payment_id="",
                         external_id="",
                         payment_url="",
@@ -442,6 +486,7 @@ class PlategaProvider(PaymentProvider):
 
                 return PlategaCreatePaymentResult(
                     success=True,
+                    http_status=response.status,
                     payment_id=transaction_id,
                     external_id=transaction_id,
                     payment_url=payment_url,

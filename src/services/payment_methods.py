@@ -20,6 +20,7 @@ import logging
 
 from src.config import settings
 from src.infrastructure.payments import (
+    MethodCheckResult,
     PaymentMethodInfo,
     PaymentMethodKind,
     PaymentProvider,
@@ -47,6 +48,8 @@ class PaymentMethodsService:
     _methods: list[PaymentMethodInfo] = []
     # Names of providers that passed the availability check
     _available_providers: list[str] = []
+    # Human-readable result of the last check (for the admin command)
+    _report: list[str] = []
     # Whether the cache has been filled at least once
     _initialized: bool = False
     # Guards against parallel refreshes
@@ -80,8 +83,10 @@ class PaymentMethodsService:
 
             methods: list[PaymentMethodInfo] = []
             available_providers: list[str] = []
+            report: list[str] = []
 
-            for provider_name, provider_methods in results:
+            for provider_name, provider_methods, provider_report in results:
+                report.extend(provider_report)
                 if not provider_methods:
                     continue
                 available_providers.append(provider_name)
@@ -92,6 +97,7 @@ class PaymentMethodsService:
 
             cls._methods = methods
             cls._available_providers = available_providers
+            cls._report = report
             cls._initialized = True
 
             cls._log_result(methods)
@@ -124,33 +130,33 @@ class PaymentMethodsService:
     async def _check_provider(
         cls,
         provider_name: str,
-    ) -> tuple[str, list[PaymentMethodInfo]]:
+    ) -> tuple[str, list[PaymentMethodInfo], list[str]]:
         """Check a single provider and all payment methods it declares.
 
         Args:
             provider_name: Name of the provider registered in the factory.
 
         Returns:
-            Tuple of (provider name, its working methods; empty list if the
-            provider cannot be used).
+            Tuple of (provider name, its working methods, report lines).
+            The list of methods is empty if the provider cannot be used.
         """
         try:
             provider = PaymentProviderFactory.create(provider_name)
 
             if not provider.is_configured():
                 logger.error(f"Payment provider '{provider_name}' is not configured, skipping")
-                return provider_name, []
+                return provider_name, [], [f"{provider_name}: не настроен"]
 
             if not await provider.check_availability():
                 logger.error(f"Payment provider '{provider_name}' is unavailable, skipping")
-                return provider_name, []
+                return provider_name, [], [f"{provider_name}: недоступен"]
 
             declared_methods = provider.get_payment_methods()
             if not declared_methods:
                 logger.error(
                     f"Payment provider '{provider_name}' has no enabled payment methods, skipping"
                 )
-                return provider_name, []
+                return provider_name, [], [f"{provider_name}: нет включенных способов оплаты"]
 
             # Every declared method is probed separately: a provider may be
             # alive while some of its methods are switched off for the merchant
@@ -158,17 +164,28 @@ class PaymentMethodsService:
                 *(cls._check_method(provider, method) for method in declared_methods)
             )
 
-            return provider_name, [method for method, works in checks if works]
+            working: list[PaymentMethodInfo] = []
+            report: list[str] = []
+
+            for method, result in checks:
+                mark = "✅" if result.available else "❌"
+                suffix = f" — {result.reason}" if result.reason else ""
+                report.append(f"{mark} {provider_name}:{method.code} {method.label}{suffix}")
+
+                if result.available:
+                    working.append(method)
+
+            return provider_name, working, report
 
         except Exception as e:
             logger.error(f"Failed to check payment provider '{provider_name}': {e}")
-            return provider_name, []
+            return provider_name, [], [f"{provider_name}: ошибка проверки — {e}"]
 
     @staticmethod
     async def _check_method(
         provider: PaymentProvider,
         method: PaymentMethodInfo,
-    ) -> tuple[PaymentMethodInfo, bool]:
+    ) -> tuple[PaymentMethodInfo, MethodCheckResult]:
         """Check a single payment method of a provider.
 
         Args:
@@ -176,13 +193,26 @@ class PaymentMethodsService:
             method: Method to check.
 
         Returns:
-            Tuple of (method, whether it works).
+            Tuple of (method, check result).
         """
         try:
             return method, await provider.check_method_availability(method)
         except Exception as e:
-            logger.error(f"Failed to check payment method '{method.key}': {e}")
-            return method, False
+            # Ошибка самой проверки не должна прятать способ оплаты
+            logger.error(f"Failed to check payment method '{method.key}', keeping it: {e}")
+            return method, MethodCheckResult(
+                available=True,
+                reason=f"проверка не удалась ({e}), способ оставлен",
+            )
+
+    @classmethod
+    def get_report(cls) -> list[str]:
+        """Get the human-readable result of the last check.
+
+        Returns:
+            Report lines, one per checked payment method or skipped provider.
+        """
+        return list(cls._report)
 
     @classmethod
     def get_available_methods(cls) -> list[PaymentMethodInfo]:
@@ -355,4 +385,5 @@ class PaymentMethodsService:
         """Reset the cache (used in tests)."""
         cls._methods = []
         cls._available_providers = []
+        cls._report = []
         cls._initialized = False

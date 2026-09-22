@@ -21,6 +21,7 @@ from src.infrastructure.database.repositories import (
 )
 from src.models.subscription import Subscription
 from src.models.user import User
+from src.services.payment_methods import PaymentMethodsService
 from src.services.subscription import SubscriptionService
 from src.services.tariff import get_tariff_type_by_days
 from src.services.user import UserService
@@ -1055,6 +1056,62 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
         await message.answer("❌ Команда /cancel не применима в текущем состоянии.")
 
 
+async def cmd_payment_methods(message: Message) -> None:
+    """Re-check payment providers and show the result.
+
+    Shows which payment methods are available right now and why the others
+    were rejected. Useful when the bot shows no payment buttons: the answer
+    contains the error text returned by the provider API.
+
+    Args:
+        message: Telegram message.
+    """
+    if not message.from_user:
+        await message.answer("❌ Не удалось определить пользователя.")
+        return
+
+    admin_id = str(message.from_user.id)
+    if admin_id not in settings.admin_id_list:
+        logger.warning(f"Non-admin user {admin_id} tried to use payment methods command")
+        await message.answer("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    await message.answer("⏳ Проверяю платежные провайдеры...")
+
+    try:
+        await PaymentMethodsService.refresh_cache()
+    except Exception as e:
+        logger.error(f"Failed to refresh payment methods: {e}")
+        await message.answer(f"❌ Ошибка проверки: {e}")
+        return
+
+    report = PaymentMethodsService.get_report()
+    kinds = PaymentMethodsService.get_available_kinds()
+
+    lines = ["<b>Проверка способов оплаты</b>", ""]
+
+    if report:
+        lines.append("<b>Результат по способам:</b>")
+        lines.extend(report)
+    else:
+        lines.append("Платежные провайдеры не зарегистрированы.")
+
+    lines.append("")
+
+    if kinds:
+        lines.append("<b>Кнопки в боте:</b>")
+        for kind in kinds:
+            method = PaymentMethodsService.resolve(kind)
+            if method is not None:
+                lines.append(f"• {method.label} → {method.provider}:{method.code}")
+    else:
+        lines.append("⚠️ Кнопок внешней оплаты нет, доступна только оплата с баланса.")
+
+    await message.answer("\n".join(lines), parse_mode="HTML")
+
+    logger.error(f"Payment methods checked by admin {admin_id}: {len(kinds)} kinds available")
+
+
 def register_admin_handlers(dp: Dispatcher) -> None:
     """Register admin command handlers."""
     dp.message.register(cmd_subscriptions, Command(Commands.SUBSCRIPTIONS))
@@ -1064,6 +1121,7 @@ def register_admin_handlers(dp: Dispatcher) -> None:
     dp.message.register(cmd_paid_message, Command(Commands.PAID_MESSAGE))
     dp.message.register(cmd_add_balance, Command(Commands.ADD_BALANCE))
     dp.message.register(cmd_grant_subscription, Command(Commands.GRANT_SUBSCRIPTION))
+    dp.message.register(cmd_payment_methods, Command(Commands.PAYMENT_METHODS))
     dp.message.register(cmd_cancel, Command("cancel"))
 
     dp.message.register(process_all_message, BroadcastStates.waiting_for_all_message)

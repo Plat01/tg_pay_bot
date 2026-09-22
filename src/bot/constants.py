@@ -92,6 +92,7 @@ class Commands:
     GRANT_SUBSCRIPTION = "grant_subscription"
     TARIFFS = "tariffs"
     ADD_TARIFF = "add_tariff"
+    PAYMENT_METHODS = "payment_methods"
 
 
 class Limits:

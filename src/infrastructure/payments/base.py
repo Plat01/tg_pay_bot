@@ -20,6 +20,7 @@ __all__ = [
     "PaymentProviderName",
     "PaymentMethodKind",
     "PaymentMethodInfo",
+    "MethodCheckResult",
     "CreatePaymentResult",
     "PaymentStatusResult",
     "WebhookData",
@@ -216,6 +217,25 @@ class PaymentMethodInfo(BaseModel):
         return f"{self.emoji} {self.label}".strip()
 
 
+class MethodCheckResult(BaseModel):
+    """Result of checking a single payment method.
+
+    A method is hidden only when the provider clearly says it does not work.
+    Transport problems (network errors, 5xx) must not hide a method: in that
+    case the provider returns ``available=True`` with a filled ``reason``, so
+    a temporary failure of the provider API does not leave the bot without
+    payment buttons.
+
+    Attributes:
+        available: Whether the method should be shown to users.
+        reason: Why the method was rejected, or what went wrong during an
+            inconclusive check. Empty when everything is fine.
+    """
+
+    available: bool = Field(..., description="Whether the method can be used")
+    reason: str = Field(default="", description="Rejection reason or check error")
+
+
 class PaymentProvider(ABC):
     """Abstract base class for payment providers.
 
@@ -283,20 +303,25 @@ class PaymentProvider(ABC):
         """
         return self.is_configured()
 
-    async def check_method_availability(self, method: PaymentMethodInfo) -> bool:
+    async def check_method_availability(self, method: PaymentMethodInfo) -> MethodCheckResult:
         """Check that a single payment method works for this merchant.
 
         Called on bot start for every method returned by
         ``get_payment_methods()``. Providers whose API does not report the
         enabled methods should override this with a probe request.
 
+        A method must be reported unavailable only when the provider says so:
+        on a network error or a provider-side failure the method stays
+        available (with a filled reason), otherwise a temporary outage would
+        leave the bot without any payment buttons.
+
         Args:
             method: Method to check.
 
         Returns:
-            True if the method can be used, False otherwise.
+            MethodCheckResult with the verdict and the reason.
         """
-        return True
+        return MethodCheckResult(available=True)
 
     @abstractmethod
     async def create_payment(

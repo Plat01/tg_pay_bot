@@ -16,6 +16,7 @@ from unittest.mock import patch
 import pytest
 
 from src.infrastructure.payments.base import (
+    MethodCheckResult,
     PaymentMethodInfo,
     PaymentMethodKind,
     PaymentProvider,
@@ -61,8 +62,10 @@ class FakeProvider(PaymentProvider):
             for index, kind in enumerate(self._kinds, start=1)
         ]
 
-    async def check_method_availability(self, method: PaymentMethodInfo) -> bool:
-        return method.kind not in self._broken_kinds
+    async def check_method_availability(self, method: PaymentMethodInfo) -> MethodCheckResult:
+        if method.kind in self._broken_kinds:
+            return MethodCheckResult(available=False, reason="способ выключен")
+        return MethodCheckResult(available=True)
 
     async def create_payment(self, amount, currency, description, metadata=None, **kwargs):
         pass
@@ -197,6 +200,56 @@ class TestMethodProbe:
 
         assert methods == []
         assert PaymentMethodsService.get_available_providers() == []
+
+
+class TestReport:
+    """Tests for the report shown by the admin command."""
+
+    async def test_report_lists_every_method(self) -> None:
+        """The report has a line per method with its verdict."""
+        providers = {
+            "fake": FakeProvider(
+                kinds=[PaymentMethodKind.SBP, PaymentMethodKind.CARD_RU],
+                broken_kinds={PaymentMethodKind.CARD_RU},
+            )
+        }
+
+        with patch_providers(providers):
+            await PaymentMethodsService.refresh_cache()
+
+        report = PaymentMethodsService.get_report()
+
+        assert len(report) == 2
+        assert any(line.startswith("✅") and "СБП" in line for line in report)
+        assert any(line.startswith("❌") and "способ выключен" in line for line in report)
+
+    async def test_report_explains_skipped_provider(self) -> None:
+        """A skipped provider is explained in the report."""
+        providers = {"fake": FakeProvider(configured=False)}
+
+        with patch_providers(providers):
+            await PaymentMethodsService.refresh_cache()
+
+        assert PaymentMethodsService.get_report() == ["fake: не настроен"]
+
+
+class TestCheckFailure:
+    """Tests that a failed check does not hide working methods."""
+
+    async def test_method_is_kept_when_check_raises(self) -> None:
+        """An exception in the check leaves the method available."""
+
+        class RaisingProvider(FakeProvider):
+            async def check_method_availability(self, method):
+                raise RuntimeError("timeout")
+
+        providers = {"fake": RaisingProvider(kinds=[PaymentMethodKind.SBP])}
+
+        with patch_providers(providers):
+            methods = await PaymentMethodsService.refresh_cache()
+
+        assert [method.kind for method in methods] == [PaymentMethodKind.SBP]
+        assert "timeout" in PaymentMethodsService.get_report()[0]
 
 
 class TestKinds:
